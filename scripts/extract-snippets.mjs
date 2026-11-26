@@ -9,9 +9,9 @@
 //
 // To show new code on a page: add an entry below, run `npm run snippets`, then
 // list the snippet id in that chapter's `snippets` (src/data/chapters/).
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repos = {
@@ -22,7 +22,9 @@ const repoName = { frontend: 'ARMS.Frontend', backend: 'ARMS.Backend' }
 
 /**
  * id: used by chapters; repo: frontend | backend; file: path inside the repo;
- * from/to: 1-based inclusive line range; language: optional highlighter override.
+ * from/to: 1-based inclusive line range; language: optional highlighter override;
+ * notes: { [lineNumber]: 'text' } extra explanation shown after that line
+ * (styled as a comment, without a line number, so the real numbering stays).
  */
 const SNIPPETS = [
   // ---------- 01 UI/UX Design · Foundations ----------
@@ -43,20 +45,34 @@ const SNIPPETS = [
   { id: 'sidebar-logo-collapse', repo: 'frontend', file: 'src/styles/sidebar.css', from: 182, to: 188 },
 ]
 
-const LANGS = { css: 'css', js: 'jsx', jsx: 'jsx', ts: 'tsx', tsx: 'tsx', cs: 'csharp', json: 'json', html: 'markup' }
+const LANGS = { css: 'css', js: 'jsx', jsx: 'jsx', mjs: 'jsx', ts: 'tsx', tsx: 'tsx', cs: 'csharp', json: 'json', html: 'markup', yaml: 'yaml', yml: 'yaml' }
+
+// Chapter snippet lists: every file in scripts/snippets/ exports SNIPPETS.
+const snippetDir = join(root, 'scripts/snippets')
+const lists = []
+for (const file of readdirSync(snippetDir).filter((name) => name.endsWith('.mjs')).sort()) {
+  lists.push((await import(pathToFileURL(join(snippetDir, file)).href)).SNIPPETS)
+}
+const ALL = [...SNIPPETS, ...lists.flat()]
 
 const out = {}
-for (const s of SNIPPETS) {
+for (const s of ALL) {
+  if (out[s.id]) throw new Error(`duplicate snippet id ${s.id}`)
   const lines = readFileSync(join(repos[s.repo], s.file), 'utf8').split(/\r?\n/)
   if (s.to > lines.length) throw new Error(`${s.id}: ${s.file} has only ${lines.length} lines`)
+  // notes: handbook explanations shown after a line, keyed by that line's real number
+  for (const line of Object.keys(s.notes ?? {})) {
+    if (line < s.from || line > s.to) throw new Error(`${s.id}: note on line ${line} is outside ${s.from}-${s.to}`)
+  }
   out[s.id] = {
     repo: repoName[s.repo],
     file: s.file,
     from: s.from,
     language: s.language ?? LANGS[s.file.split('.').pop()] ?? 'clike',
     code: lines.slice(s.from - 1, s.to).join('\n'),
+    ...(s.notes ? { notes: s.notes } : {}),
   }
 }
 
 writeFileSync(join(root, 'src/data/snippets.json'), JSON.stringify(out, null, 2) + '\n')
-console.log(`wrote ${SNIPPETS.length} snippets to src/data/snippets.json`)
+console.log(`wrote ${ALL.length} snippets to src/data/snippets.json`)

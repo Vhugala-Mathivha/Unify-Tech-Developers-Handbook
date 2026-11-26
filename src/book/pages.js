@@ -7,7 +7,7 @@
 // matching TOC entry's `pageId` to the chapter id in src/data/contents.js.
 // Page numbers update automatically.
 import { tocCategories } from '../data/contents'
-import { chapters } from '../data/chapters'
+import { chapters, chapterSpreads } from '../data/chapters'
 
 /**
  * How many "rows" fit on one contents page. An entry is 1 row, a group
@@ -72,10 +72,16 @@ function buildPages() {
   }
 
   // Chapter spreads: text on a left (even) page, screen + code facing it.
+  // A chapter is one spread, or several (`spreads`) for a bigger feature.
   for (const chapter of chapters) {
     if (pages.length % 2 === 0) pages.push({ key: `before-${chapter.id}`, type: 'blank' })
-    pages.push({ key: chapter.id, type: 'chapter', chapter })
-    pages.push({ key: `${chapter.id}-code`, type: 'chapter-code', chapter })
+    const spreads = chapterSpreads(chapter)
+    spreads.forEach((spread, i) => {
+      const key = i === 0 ? chapter.id : `${chapter.id}--${i + 1}`
+      const info = { chapter, spread, part: i + 1, parts: spreads.length }
+      pages.push({ key, type: 'chapter', ...info })
+      pages.push({ key: `${key}-code`, type: 'chapter-code', ...info })
+    })
   }
 
   // the leaf count must be even, so pad with a blank page if needed

@@ -329,3 +329,110 @@
   line-height: 1.35;
   color: var(--gray);
 }
+
+/* ---------- steps (data-driven) ---------- */
+
+.viz-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.viz-steps li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 4.4cqw 1fr;
+  gap: 1.6cqw;
+  padding-bottom: 1.5cqw;
+}
+
+/* the line joining one step to the next */
+.viz-steps li:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 2.1cqw;
+  top: 4.4cqw;
+  bottom: 0.2cqw;
+  width: 0.25cqw;
+  background: #e0dbd2;
+}
+
+.viz-steps__num {
+  display: grid;
+  place-items: center;
+  width: 4.4cqw;
+  height: 4.4cqw;
+  border-radius: 50%;
+  background: var(--burgundy);
+  font-family: var(--font-title);
+  font-weight: 700;
+  font-size: 2cqw;
+  color: #fff;
+}
+
+.viz-steps__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3cqw;
+  padding-top: 0.6cqw;
+  font-family: var(--font-body);
+  font-size: 2.15cqw;
+  line-height: 1.45;
+  color: var(--gray);
+}
+
+.viz-steps__body strong {
+  font-family: var(--font-title);
+  font-size: 2.4cqw;
+  color: var(--ink);
+}
+
+/* ---------- tree (data-driven) ---------- */
+
+.viz-tree {
+  margin: 0;
+  padding: 2cqw 2.4cqw;
+  border: 0.25cqw solid #e6e2da;
+  border-radius: 1.4cqw;
+  background: #fff;
+  font-family: 'Cascadia Code', Consolas, 'Courier New', monospace;
+  font-size: 1.8cqw;
+  line-height: 1.6;
+  color: var(--ink);
+  white-space: pre-wrap;
+}
+
+/* ---------- table (data-driven) ---------- */
+
+.viz-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-body);
+  font-size: 2.05cqw;
+  line-height: 1.4;
+}
+
+.viz-table th {
+  padding: 0 1.2cqw 0.8cqw 0;
+  text-align: left;
+  font-family: var(--font-title);
+  font-weight: 500;
+  font-size: 1.8cqw;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gray);
+  border-bottom: 0.25cqw solid #e0dbd2;
+}
+
+.viz-table td {
+  padding: 0.8cqw 1.2cqw 0.8cqw 0;
+  vertical-align: top;
+  border-bottom: 0.2cqw solid #eeeae3;
+  color: var(--ink);
+}
+
+.viz .viz-table code {
+  font-size: 1.75cqw;
+  color: var(--burgundy);
+  overflow-wrap: anywhere;
+}

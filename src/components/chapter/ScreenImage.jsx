@@ -26,7 +26,7 @@ export default function ScreenImage({ src, alt, caption }) {
         onClick={() => setHidden(true)}
         aria-label={`${alt}. Click to hide the image.`}
       >
-        <img className="screen__img" src={src} alt="" draggable="false" />
+        <img className="screen__img" src={src} alt="" draggable="false" loading="lazy" decoding="async" />
         <span className="screen__hint" aria-hidden="true">
           Click to hide
         </span>

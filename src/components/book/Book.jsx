@@ -29,9 +29,9 @@ function renderPage(page) {
     case 'toc':
       return <TocPage category={page.category} groups={page.groups} continued={page.continued} />
     case 'chapter':
-      return <ChapterTextPage chapter={page.chapter} />
+      return <ChapterTextPage chapter={page.chapter} spread={page.spread} part={page.part} parts={page.parts} />
     case 'chapter-code':
-      return <ChapterCodePage chapter={page.chapter} />
+      return <ChapterCodePage chapter={page.chapter} spread={page.spread} />
     default:
       return null
   }

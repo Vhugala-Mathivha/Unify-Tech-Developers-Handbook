@@ -70,3 +70,27 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* handbook notes: explanation added by the book, not part of the ARMS file */
+.code__line--note {
+  background: rgba(220, 180, 60, 0.08);
+  box-shadow: inset 0.5cqw 0 0 #d7ba7d;
+}
+
+.code__line--note .code__number {
+  color: #d7ba7d;
+}
+
+.code__line--note .code__text {
+  font-style: italic;
+  color: #d7ba7d;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

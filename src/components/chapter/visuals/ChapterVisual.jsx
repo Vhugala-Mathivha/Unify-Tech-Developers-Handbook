@@ -208,13 +208,63 @@ function Themes() {
   )
 }
 
-const VISUALS = { principles: Principles, palette: Palette, typeScale: TypeScale, icons: Icons, logos: Logos, spacing: Spacing, themes: Themes }
+// ---------- data-driven visuals: { type, ... } written in the chapter data ----------
 
-export default function ChapterVisual({ name }) {
-  const Visual = VISUALS[name]
+/** A numbered flow: { type: 'steps', items: [[title, text], ...] } */
+function Steps({ items }) {
+  return (
+    <ol className="viz-steps">
+      {items.map(([title, text], i) => (
+        <li key={title}>
+          <span className="viz-steps__num">{i + 1}</span>
+          <span className="viz-steps__body">
+            <strong>{title}</strong>
+            {text && <span>{text}</span>}
+          </span>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+/** A folder tree or any monospace block: { type: 'tree', text: '...' } */
+function Tree({ text }) {
+  return <pre className="viz-tree">{text}</pre>
+}
+
+/** A small table: { type: 'table', head: [...], rows: [[...], ...] }; cells in `code` columns render as code. */
+function Table({ head, rows, code = [0] }) {
+  return (
+    <table className="viz-table">
+      <thead>
+        <tr>
+          {head.map((h) => (
+            <th key={h}>{h}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => (
+          <tr key={row.join('|')}>
+            {row.map((cell, i) => (
+              <td key={i}>{code.includes(i) ? <code>{cell}</code> : cell}</td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+const VISUALS = { principles: Principles, palette: Palette, typeScale: TypeScale, icons: Icons, logos: Logos, spacing: Spacing, themes: Themes }
+const DATA_VISUALS = { steps: Steps, tree: Tree, table: Table }
+
+/** `visual` is a name (a fixed illustration) or an object with a `type` (data-driven). */
+export default function ChapterVisual({ visual, name = visual }) {
+  const Visual = typeof name === 'string' ? VISUALS[name] : DATA_VISUALS[name?.type]
   return Visual ? (
     <div className="viz">
-      <Visual />
+      <Visual {...(typeof name === 'object' ? name : {})} />
     </div>
   ) : null
 }

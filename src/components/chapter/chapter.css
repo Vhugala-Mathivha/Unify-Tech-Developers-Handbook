@@ -8,6 +8,15 @@
   color: var(--ink);
 }
 
+/* blocks keep their real height (a shrunk block would spill over the page number) */
+.chapter > * {
+  flex-shrink: 0;
+}
+
+.chapter > .chapter__code {
+  flex-shrink: 1;
+}
+
 /* ---------- Left page: text ---------- */
 
 .chapter__overline {
@@ -164,4 +173,89 @@
 .screen__show:focus-visible {
   outline: 0.4cqw solid var(--burgundy);
   outline-offset: 0.4cqw;
+}
+
+/* ---------- Multi-spread chapters ---------- */
+
+.chapter__subtitle {
+  margin: -1.6cqw 0 2.6cqw;
+  font-family: var(--font-body);
+  font-style: italic;
+  font-size: 2.7cqw;
+  color: var(--gray);
+}
+
+.chapter__kicker {
+  margin: 0 0 0.8cqw;
+  font-family: var(--font-title);
+  font-weight: 500;
+  font-size: 2.3cqw;
+  color: var(--gray);
+}
+
+.chapter__title--part {
+  font-size: 5cqw;
+}
+
+.chapter__continues {
+  margin: 1.6cqw 0 0;
+  text-align: right;
+  font-family: var(--font-body);
+  font-style: italic;
+  font-size: 2cqw;
+  color: var(--gray-soft);
+}
+
+/* ---------- See also ---------- */
+
+.chapter__see-also {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.8cqw 1.4cqw;
+  margin: 2cqw 0 0;
+}
+
+.chapter__points + .chapter__see-also {
+  margin-top: 1.6cqw;
+}
+
+/* sits at the bottom when there are no key points */
+.chapter > .chapter__see-also:not(.chapter__points + .chapter__see-also) {
+  margin-top: auto;
+}
+
+.chapter__see-also-label {
+  font-family: var(--font-title);
+  font-weight: 500;
+  font-size: 1.9cqw;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gray);
+}
+
+.chapter__see-also-link {
+  padding: 0.4cqw 1.4cqw;
+  border: 0.2cqw solid #d9d5cd;
+  border-radius: 99px;
+  background: #fff;
+  font-family: var(--font-body);
+  font-size: 2cqw;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.chapter__see-also-link > * {
+  pointer-events: none;
+}
+
+.chapter__see-also-link:hover,
+.chapter__see-also-link:focus-visible {
+  border-color: var(--burgundy);
+  color: var(--burgundy);
+}
+
+.chapter__see-also-page {
+  font-family: var(--font-title);
+  color: var(--gray-soft);
 }
