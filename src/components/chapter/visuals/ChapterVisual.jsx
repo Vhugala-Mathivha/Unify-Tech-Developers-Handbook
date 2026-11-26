@@ -2,6 +2,11 @@
 // (`visual` in src/data/chapters/). Colours and sizes are the real ARMS
 // token values from tut-components-library and ARMS.Frontend/src/styles.
 import { Bell, CalendarClock, CalendarDays, CalendarSearch, Inbox, LayoutDashboard, MapPinned, ShieldCheck } from 'lucide-react'
+import logoColor from '../../../assets/logos/tut-logo-color.webp'
+import logoWhite from '../../../assets/logos/tut-logo-white.webp'
+import crest from '../../../assets/logos/tut-crest.webp'
+import faviconLight from '../../../assets/logos/favicon-light.webp'
+import faviconDark from '../../../assets/logos/favicon-dark.webp'
 import './visuals.css'
 
 const PRINCIPLES = [
@@ -145,10 +150,36 @@ function Spacing() {
   )
 }
 
-// the same tokens in each theme
+// Every logo ARMS uses, on the background it is used on.
+// `bg` matches where it appears: white pages, the navy sidebar, a dark browser tab.
+const LOGOS = [
+  { src: logoColor, file: 'TUT_Logo_Color.webp', use: 'Landing header, Sign in, OTP', bg: '#fff', wide: true },
+  { src: logoWhite, file: 'TUT_Logo_White.webp', use: 'Sidebar, landing footer', bg: 'oklch(32% .09 255)', wide: true },
+  { src: crest, file: 'TUT Crest.webp', use: 'Collapsed sidebar', bg: 'oklch(32% .09 255)' },
+  { src: faviconLight, file: 'TUT Web Icon.png', use: 'Browser tab, light', bg: '#fff' },
+  { src: faviconDark, file: 'TUT White Logo.png', use: 'Browser tab, dark', bg: 'oklch(20% .012 255)' },
+]
+
+function Logos() {
+  return (
+    <ul className="viz-logos">
+      {LOGOS.map((logo) => (
+        <li key={logo.file} className={logo.wide ? 'viz-logos__item--wide' : undefined}>
+          <span className="viz-logos__stage" style={{ background: logo.bg }}>
+            <img src={logo.src} alt={`${logo.file}, used in ${logo.use}`} />
+          </span>
+          <code>{logo.file}</code>
+          <span className="viz-logos__use">{logo.use}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+// the same tokens in each theme, plus the favicon applyTheme() picks for it
 const THEMES = {
-  light: { bg: 'oklch(99.5% .002 250)', card: 'oklch(100% 0 0)', fg: 'oklch(19% .014 255)', primary: 'oklch(44.3% .126 250)', muted: 'oklch(48% .014 255)', border: 'oklch(90% .008 250)' },
-  dark: { bg: 'oklch(15% .01 255)', card: 'oklch(20% .012 255)', fg: 'oklch(95% .006 250)', primary: 'oklch(62% .12 250)', muted: 'oklch(68% .02 250)', border: 'oklch(100% 0 0 / .1)' },
+  light: { favicon: faviconLight, bg: 'oklch(99.5% .002 250)', card: 'oklch(100% 0 0)', fg: 'oklch(19% .014 255)', primary: 'oklch(44.3% .126 250)', muted: 'oklch(48% .014 255)', border: 'oklch(90% .008 250)' },
+  dark: { favicon: faviconDark, bg: 'oklch(15% .01 255)', card: 'oklch(20% .012 255)', fg: 'oklch(95% .006 250)', primary: 'oklch(62% .12 250)', muted: 'oklch(68% .02 250)', border: 'oklch(100% 0 0 / .1)' },
 }
 
 function Themes() {
@@ -156,6 +187,11 @@ function Themes() {
     <div className="viz-themes">
       {Object.entries(THEMES).map(([name, t]) => (
         <div key={name} className="viz-themes__panel" style={{ background: t.bg, color: t.fg }}>
+          {/* a browser tab showing the favicon for this theme */}
+          <span className="viz-themes__tab" style={{ background: t.card, borderColor: t.border }}>
+            <img src={t.favicon} alt={name === 'light' ? 'Colour TUT favicon' : 'White TUT favicon'} />
+            ARMS
+          </span>
           <span className="viz-themes__name">{name === 'light' ? 'Light' : '.dark'}</span>
           <span className="viz-themes__card" style={{ background: t.card, borderColor: t.border }}>
             <span className="viz-themes__title">Card title</span>
@@ -172,7 +208,7 @@ function Themes() {
   )
 }
 
-const VISUALS = { principles: Principles, palette: Palette, typeScale: TypeScale, icons: Icons, spacing: Spacing, themes: Themes }
+const VISUALS = { principles: Principles, palette: Palette, typeScale: TypeScale, icons: Icons, logos: Logos, spacing: Spacing, themes: Themes }
 
 export default function ChapterVisual({ name }) {
   const Visual = VISUALS[name]

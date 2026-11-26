@@ -22,7 +22,7 @@ const repoName = { frontend: 'ARMS.Frontend', backend: 'ARMS.Backend' }
 
 /**
  * id: used by chapters; repo: frontend | backend; file: path inside the repo;
- * from/to: 1-based inclusive line range.
+ * from/to: 1-based inclusive line range; language: optional highlighter override.
  */
 const SNIPPETS = [
   // ---------- 01 UI/UX Design · Foundations ----------
@@ -35,7 +35,12 @@ const SNIPPETS = [
   { id: 'variables-radii-shadows', repo: 'frontend', file: 'src/styles/variables.css', from: 56, to: 70 },
   { id: 'dashboard-layout', repo: 'frontend', file: 'src/styles/dashboardLayout.css', from: 21, to: 35 },
   { id: 'index-dark-variant', repo: 'frontend', file: 'src/index.css', from: 52, to: 61 },
-  { id: 'theme-apply', repo: 'frontend', file: 'src/utils/theme.js', from: 71, to: 77 },
+  { id: 'theme-apply', repo: 'frontend', file: 'src/utils/theme.js', from: 61, to: 77 },
+  // the lines inside the inline <script>, so highlight them as JavaScript
+  { id: 'index-html-anti-flash', repo: 'frontend', file: 'index.html', from: 14, to: 31, language: 'jsx' },
+  { id: 'sidebar-logo-imports', repo: 'frontend', file: 'src/components/layout/NavSidebar.jsx', from: 81, to: 82 },
+  { id: 'sidebar-logo-markup', repo: 'frontend', file: 'src/components/layout/NavSidebar.jsx', from: 180, to: 183 },
+  { id: 'sidebar-logo-collapse', repo: 'frontend', file: 'src/styles/sidebar.css', from: 182, to: 188 },
 ]
 
 const LANGS = { css: 'css', js: 'jsx', jsx: 'jsx', ts: 'tsx', tsx: 'tsx', cs: 'csharp', json: 'json', html: 'markup' }
@@ -48,7 +53,7 @@ for (const s of SNIPPETS) {
     repo: repoName[s.repo],
     file: s.file,
     from: s.from,
-    language: LANGS[s.file.split('.').pop()] ?? 'clike',
+    language: s.language ?? LANGS[s.file.split('.').pop()] ?? 'clike',
     code: lines.slice(s.from - 1, s.to).join('\n'),
   }
 }

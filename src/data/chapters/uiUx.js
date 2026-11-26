@@ -12,6 +12,7 @@ import adminDashboardDark from '../../assets/screens/admin-dashboard-dark.webp'
 import studentSettings from '../../assets/screens/student-settings.webp'
 import studentDashboard from '../../assets/screens/student-dashboard.webp'
 import timetableManagement from '../../assets/screens/admin-timetable-management.webp'
+import loginLight from '../../assets/screens/login-light.webp'
 
 /**
  * @typedef {{ src: string, alt: string, caption: string }} Screen
@@ -109,6 +110,27 @@ export const uiUxChapters = [
     snippets: ['admin-nav-icons', 'welcome-backgrounds'],
   },
   {
+    id: 'ui-logos',
+    category: 'ui-ux',
+    group: 'Foundations',
+    title: 'Logos & brand marks',
+    intro: [
+      'ARMS uses five TUT brand marks, each chosen for the background it sits on: the colour logo on white, the white logo on navy and dark surfaces, and the crest where there is only room for a small square.',
+      'Page logos live in src/assets/images and are imported by the components that show them. The two favicons live in public/, so index.html can point at them before React loads.',
+    ],
+    visual: 'logos',
+    points: [
+      'The sidebar is navy in both themes, so it always shows the white logo. When it collapses, the logo fades out and the crest fades in.',
+      'The landing page and sign-in keep the colour logo in dark mode. Only the favicon swaps (see Light & dark mode).',
+    ],
+    screen: {
+      src: loginLight,
+      alt: 'ARMS sign-in page with the colour TUT logo on a white card',
+      caption: 'Sign in: the colour TUT logo on a white card.',
+    },
+    snippets: ['sidebar-logo-imports', 'sidebar-logo-markup', 'sidebar-logo-collapse'],
+  },
+  {
     id: 'ui-layout-spacing',
     category: 'ui-ux',
     group: 'Foundations',
@@ -140,14 +162,14 @@ export const uiUxChapters = [
     ],
     visual: 'themes',
     points: [
-      'An inline script in index.html applies the theme before React loads, so the page never flashes white.',
-      'The favicon switches to the white TUT logo in dark mode.',
+      'The logo follows the theme too: applyTheme swaps the favicon to the white TUT logo in dark mode and back to the colour icon in light mode.',
+      'An inline script in index.html applies the theme and the matching favicon before React loads, so nothing flashes.',
     ],
     screen: {
       src: adminDashboardDark,
       alt: 'System Admin dashboard in dark mode',
       caption: 'The same dashboard in dark mode: only the tokens changed.',
     },
-    snippets: ['theme-apply', 'index-dark-variant'],
+    snippets: ['theme-apply', 'index-html-anti-flash', 'index-dark-variant'],
   },
 ]

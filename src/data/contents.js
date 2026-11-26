@@ -28,6 +28,7 @@ export const tocCategories = [
           { title: 'Colour palette & themes', pageId: 'ui-colour-palette' },
           { title: 'Typography', pageId: 'ui-typography' },
           { title: 'Icons & imagery', pageId: 'ui-icons-imagery' },
+          { title: 'Logos & brand marks', pageId: 'ui-logos' },
           { title: 'Layout, spacing & grids', pageId: 'ui-layout-spacing' },
           { title: 'Light & dark mode', pageId: 'ui-light-dark' },
         ],

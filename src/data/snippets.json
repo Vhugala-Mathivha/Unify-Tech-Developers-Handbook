@@ -65,8 +65,36 @@
   "theme-apply": {
     "repo": "ARMS.Frontend",
     "file": "src/utils/theme.js",
-    "from": 71,
+    "from": 61,
     "language": "jsx",
-    "code": "/** Toggles the `dark` class on `<html>` to match the given theme preference. */\nexport function applyTheme(theme) {\n  if (typeof document === 'undefined') return\n  const isDark = resolveIsDark(theme)\n  document.documentElement.classList.toggle('dark', isDark)\n  applyFavicon(isDark)\n}"
+    "code": "export const FAVICON_LIGHT = '/TUT Web Icon.png'\nexport const FAVICON_DARK = '/TUT White Logo.png'\n\n/** Swaps the favicon to the white TUT logo in dark mode, the color logo otherwise. */\nexport function applyFavicon(isDark) {\n  if (typeof document === 'undefined') return\n  const link = document.getElementById('favicon')\n  if (link) link.href = isDark ? FAVICON_DARK : FAVICON_LIGHT\n}\n\n/** Toggles the `dark` class on `<html>` to match the given theme preference. */\nexport function applyTheme(theme) {\n  if (typeof document === 'undefined') return\n  const isDark = resolveIsDark(theme)\n  document.documentElement.classList.toggle('dark', isDark)\n  applyFavicon(isDark)\n}"
+  },
+  "index-html-anti-flash": {
+    "repo": "ARMS.Frontend",
+    "file": "index.html",
+    "from": 14,
+    "language": "jsx",
+    "code": "      (function () {\n        try {\n          var storedTheme = localStorage.getItem('arms_theme') || 'light'\n          var isDark =\n            storedTheme === 'dark' ||\n            (storedTheme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)\n\n          if (isDark) {\n            document.documentElement.classList.add('dark')\n            document.getElementById('favicon').href = '/TUT White Logo.png'\n          } else {\n            document.documentElement.classList.remove('dark')\n            document.getElementById('favicon').href = '/TUT Web Icon.png'\n          }\n        } catch (e) {\n          // localStorage/matchMedia unavailable — fall back to light mode.\n        }\n      })()"
+  },
+  "sidebar-logo-imports": {
+    "repo": "ARMS.Frontend",
+    "file": "src/components/layout/NavSidebar.jsx",
+    "from": 81,
+    "language": "jsx",
+    "code": "import tutLogo from '../../assets/images/TUT_Logo_White.webp'\nimport tutCrest from '../../assets/images/TUT Crest.webp'"
+  },
+  "sidebar-logo-markup": {
+    "repo": "ARMS.Frontend",
+    "file": "src/components/layout/NavSidebar.jsx",
+    "from": 180,
+    "language": "jsx",
+    "code": "          <div className=\"arms-sidebar__header\">\n            <img src={tutLogo} alt={SITE.name} className=\"arms-sidebar__logo\" />\n            <img src={tutCrest} alt=\"\" aria-hidden=\"true\" className=\"arms-sidebar__crest\" />\n          </div>"
+  },
+  "sidebar-logo-collapse": {
+    "repo": "ARMS.Frontend",
+    "file": "src/styles/sidebar.css",
+    "from": 182,
+    "language": "css",
+    "code": ".arms-sidebar[data-collapsed='true'] .arms-sidebar__logo {\n  opacity: 0;\n}\n\n.arms-sidebar[data-collapsed='true'] .arms-sidebar__crest {\n  opacity: 1;\n}"
   }
 }
