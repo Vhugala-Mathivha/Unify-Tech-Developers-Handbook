@@ -1,0 +1,183 @@
+/* Table of contents pages. Sizes in cqw so they scale with the page.
+   Row heights here are what TOC_ROWS_PER_PAGE in src/book/pages.js assumes. */
+
+.toc {
+  height: 100%;
+  padding: 11cqw 10cqw 14cqw;
+  color: var(--ink);
+}
+
+/* ---------- Header ---------- */
+
+.toc__header {
+  margin-bottom: 4cqw;
+}
+
+.toc__overline {
+  margin: 0 0 1.2cqw;
+  font-family: var(--font-title);
+  font-weight: 500;
+  font-size: 2.2cqw;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--burgundy);
+}
+
+.toc__title {
+  margin: 0;
+  font-family: var(--font-title);
+  font-weight: 700;
+  font-size: 6.2cqw;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.toc__title--contents {
+  font-size: 8cqw;
+  margin-bottom: 3cqw;
+}
+
+.toc__continued {
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-style: italic;
+  font-size: 0.5em;
+  letter-spacing: 0;
+  color: var(--gray-soft);
+}
+
+/* ---------- Groups ---------- */
+
+.toc__group + .toc__group {
+  margin-top: 2.6cqw;
+}
+
+.toc__group-title {
+  margin: 0 0 0.8cqw;
+  font-family: var(--font-title);
+  font-weight: 500;
+  font-size: 2.3cqw;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gray);
+}
+
+.toc__group-title .toc__continued {
+  font-size: 1em;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* ---------- Entries ---------- */
+
+.toc__entries {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.toc-entry__link {
+  display: flex;
+  align-items: baseline;
+  gap: 1.2cqw;
+  width: 100%;
+  padding: 0.55cqw 0;
+  border: 0;
+  background: none;
+  font-family: var(--font-body);
+  font-size: 2.75cqw;
+  line-height: 1.45;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.toc-entry__link[aria-disabled="true"] {
+  cursor: default;
+}
+
+/* The flip engine only ignores clicks whose target IS a button/link; a click
+   on an inner span would also count as a page-turn click. Make the button
+   the only click target. */
+.toc-entry__link > * {
+  pointer-events: none;
+}
+
+.toc-entry__title {
+  min-width: 0;
+}
+
+/* dotted leader between title and page number */
+.toc-entry__dots {
+  flex: 1;
+  min-width: 3cqw;
+  border-bottom: 0.3cqw dotted #c4c7cc;
+  transform: translateY(-0.6cqw);
+}
+
+.toc-entry__page {
+  font-family: var(--font-title);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+/* not written yet */
+.toc-entry__link[aria-disabled="true"] .toc-entry__title {
+  color: var(--gray);
+}
+
+.toc-entry__link[aria-disabled="true"] .toc-entry__page {
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-style: italic;
+  font-size: 0.85em;
+  color: var(--gray-soft);
+}
+
+.toc-entry__link:not([aria-disabled="true"]):hover .toc-entry__title,
+.toc-entry__link:not([aria-disabled="true"]):focus-visible .toc-entry__title {
+  color: var(--burgundy);
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
+  text-decoration-thickness: 0.08em;
+}
+
+.toc-entry__link:focus-visible {
+  outline: 0.4cqw solid var(--burgundy);
+  outline-offset: 0.4cqw;
+  border-radius: 0.6cqw;
+}
+
+/* ---------- Contents overview (categories) ---------- */
+
+.toc__overview {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.toc__category + .toc__category {
+  margin-top: 4.5cqw;
+}
+
+.toc-entry--lead .toc-entry__link {
+  font-family: var(--font-title);
+  font-weight: 700;
+  font-size: 3.6cqw;
+  letter-spacing: -0.01em;
+}
+
+.toc-entry__lead {
+  min-width: 5.5cqw;
+  color: var(--burgundy);
+}
+
+.toc__summary {
+  margin: 0.6cqw 0 0 6.7cqw;
+  font-family: var(--font-body);
+  font-style: italic;
+  font-size: 2.5cqw;
+  line-height: 1.5;
+  color: var(--gray);
+}

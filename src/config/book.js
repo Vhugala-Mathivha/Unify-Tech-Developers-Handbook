@@ -1,7 +1,8 @@
 // Physical layout of the book.
+import { bookPages } from '../book/pages'
 
-/** Number of content pages between the inside covers. Keep it even. */
-export const CONTENT_PAGES = 10
+/** Printed pages between the inside covers (always even; see src/book/pages.js). */
+export const CONTENT_PAGES = bookPages.length
 
 /** Page width / page height. */
 export const PAGE_ASPECT = 0.7
@@ -13,7 +14,7 @@ export const FLIP_MS = 900
 export const MAX_PAGE_HEIGHT = 760
 
 /**
- * Leaves in order: front cover, inside front cover, content pages,
+ * Leaves in order: front cover, inside front cover, printed pages,
  * inside back cover, back cover. The total must be even so the back cover
  * ends up on its own when the book is closed.
  */
@@ -23,5 +24,8 @@ export const INSIDE_FRONT = 1
 export const INSIDE_BACK = LEAF_COUNT - 2
 export const BACK_COVER = LEAF_COUNT - 1
 
-/** Leaf index -> printed page number (content leaves start at index 2). */
+/** Leaf index -> printed page number (printed pages start at leaf 2). */
 export const pageNumberOf = (leaf) => leaf - 1
+
+/** Printed page number -> leaf index. */
+export const leafOf = (pageNumber) => pageNumber + 1

@@ -1,15 +1,36 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import HTMLFlipBook from 'react-pageflip'
-import { BACK_COVER, CONTENT_PAGES, FLIP_MS, FRONT_COVER, INSIDE_BACK } from '../../config/book'
+import { BACK_COVER, FLIP_MS, FRONT_COVER, INSIDE_BACK, leafOf } from '../../config/book'
+import { bookPages } from '../../book/pages'
+import { BookNavContext } from '../../book/BookNav'
 import useBookSize from '../../hooks/useBookSize'
 import useArrowKeys from '../../hooks/useArrowKeys'
 import { playFlipSound } from '../../lib/flipSound'
 import FrontCover from '../covers/FrontCover'
 import BackCover from '../covers/BackCover'
+import DedicationPage from '../pages/DedicationPage'
+import ContentsPage from '../pages/ContentsPage'
+import TocPage from '../pages/TocPage'
 import BookPage from './BookPage'
 import BookControls from './BookControls'
 import spreadLabel from './spreadLabel'
 import './Book.css'
+
+// What each kind of printed page renders. Page numbers are printed on
+// contents pages but not on the dedication or blank pages, like a real book.
+function renderPage(page) {
+  switch (page.type) {
+    case 'dedication':
+      return <DedicationPage />
+    case 'contents':
+      return <ContentsPage />
+    case 'toc':
+      return <TocPage category={page.category} groups={page.groups} continued={page.continued} />
+    default:
+      return null
+  }
+}
+const NUMBERED = new Set(['contents', 'toc'])
 
 // Built once: leaves never change, only the engine's position in them.
 const leaves = [
@@ -17,12 +38,16 @@ const leaves = [
     <FrontCover />
   </BookPage>,
   <BookPage key="inside-front" side="left" variant="endpaper" />,
-  ...Array.from({ length: CONTENT_PAGES }, (_, i) => (
-    <BookPage key={`page-${i + 1}`} side={i % 2 === 0 ? 'right' : 'left'}>
-      <span className="book-page__number">{i + 1}</span>
+  ...bookPages.map((page) => (
+    <BookPage
+      key={page.key}
+      side={page.number % 2 ? 'right' : 'left'}
+      number={NUMBERED.has(page.type) ? page.number : null}
+    >
+      {renderPage(page)}
     </BookPage>
   )),
-  <BookPage key="inside-back" side="right" variant="endpaper" />,
+  <BookPage key="inside-back" side={bookPages.length % 2 ? 'left' : 'right'} variant="endpaper" />,
   <BookPage key="back" side="left" variant="cover">
     <BackCover />
   </BookPage>,
@@ -54,6 +79,14 @@ export default function Book() {
   const next = useCallback(() => flip(1), [flip])
   const prev = useCallback(() => flip(-1), [flip])
   useArrowKeys(prev, next)
+
+  // Jump straight to a printed page (used by table-of-contents links).
+  const nav = useMemo(
+    () => ({
+      goToPage: (pageNumber) => flipbookRef.current?.pageFlip()?.flip(leafOf(pageNumber), 'top'),
+    }),
+    [],
+  )
 
   const handleFlip = (e) => {
     pageRef.current = e.data
@@ -88,61 +121,63 @@ export default function Book() {
   const shift = shell === 'front' ? -size.width / 2 : shell === 'back' ? size.width / 2 : 0
 
   return (
-    <div className="book-scene">
-      <div
-        className={`book book--${shell}`}
-        style={{
-          '--flip-ms': `${FLIP_MS}ms`,
-          width: portrait ? size.width : size.width * 2,
-          height: size.height,
-          transform: `translateX(${shift}px)`,
-        }}
-      >
-        <div className="book__body" aria-hidden="true" />
-        <HTMLFlipBook
-          key={`${size.width}x${size.height}`}
-          ref={flipbookRef}
-          className="book__pages"
-          style={{}}
-          width={size.width}
-          height={size.height}
-          size="fixed"
-          minWidth={size.width}
-          maxWidth={size.width}
-          minHeight={size.height}
-          maxHeight={size.height}
-          autoSize={false}
-          startPage={pageRef.current}
-          startZIndex={2}
-          showCover
-          usePortrait={!size.wide}
-          drawShadow
-          maxShadowOpacity={0.45}
-          flippingTime={FLIP_MS}
-          showPageCorners
-          useMouseEvents
-          clickEventForward
-          disableFlipByClick={false}
-          mobileScrollSupport
-          swipeDistance={30}
-          onFlip={handleFlip}
-          onChangeState={handleStateChange}
-          onChangeOrientation={(e) => setPortrait(e.data === 'portrait')}
-          onInit={(e) => setPortrait(e.data?.mode === 'portrait')}
+    <BookNavContext.Provider value={nav}>
+      <div className="book-scene">
+        <div
+          className={`book book--${shell}`}
+          style={{
+            '--flip-ms': `${FLIP_MS}ms`,
+            width: portrait ? size.width : size.width * 2,
+            height: size.height,
+            transform: `translateX(${shift}px)`,
+          }}
         >
-          {leaves}
-        </HTMLFlipBook>
-      </div>
+          <div className="book__body" aria-hidden="true" />
+          <HTMLFlipBook
+            key={`${size.width}x${size.height}`}
+            ref={flipbookRef}
+            className="book__pages"
+            style={{}}
+            width={size.width}
+            height={size.height}
+            size="fixed"
+            minWidth={size.width}
+            maxWidth={size.width}
+            minHeight={size.height}
+            maxHeight={size.height}
+            autoSize={false}
+            startPage={pageRef.current}
+            startZIndex={2}
+            showCover
+            usePortrait={!size.wide}
+            drawShadow
+            maxShadowOpacity={0.45}
+            flippingTime={FLIP_MS}
+            showPageCorners
+            useMouseEvents
+            clickEventForward
+            disableFlipByClick={false}
+            mobileScrollSupport
+            swipeDistance={30}
+            onFlip={handleFlip}
+            onChangeState={handleStateChange}
+            onChangeOrientation={(e) => setPortrait(e.data === 'portrait')}
+            onInit={(e) => setPortrait(e.data?.mode === 'portrait')}
+          >
+            {leaves}
+          </HTMLFlipBook>
+        </div>
 
-      <BookControls
-        label={spreadLabel(page, portrait)}
-        canPrev={page > FRONT_COVER}
-        canNext={page < BACK_COVER}
-        onPrev={prev}
-        onNext={next}
-        sound={sound}
-        onToggleSound={() => setSound((s) => !s)}
-      />
-    </div>
+        <BookControls
+          label={spreadLabel(page, portrait)}
+          canPrev={page > FRONT_COVER}
+          canNext={page < BACK_COVER}
+          onPrev={prev}
+          onNext={next}
+          sound={sound}
+          onToggleSound={() => setSound((s) => !s)}
+        />
+      </div>
+    </BookNavContext.Provider>
   )
 }

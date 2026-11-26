@@ -1,0 +1,27 @@
+.dedication {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 22cqw 12cqw 20cqw;
+  color: var(--ink);
+}
+
+.dedication__heading {
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 5.2cqw;
+  letter-spacing: 0.01em;
+}
+
+.dedication__message {
+  margin: 0 0 0 auto;
+  max-width: 62%;
+  text-align: right;
+  font-family: var(--font-body);
+  font-style: italic;
+  font-size: 3.4cqw;
+  line-height: 1.65;
+}
