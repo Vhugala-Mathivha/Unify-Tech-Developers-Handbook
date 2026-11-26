@@ -9,7 +9,7 @@ export const COVER_H = COVER_W / PAGE_ASPECT // ≈ 142.86
 /** Size of one (square) puzzle cell. */
 export const CELL = 22
 
-/** Top of the highest missing piece; the title sits in the clear area above it. */
+/** Top of the first author piece row; the title sits in the clear area above it. */
 const FIRST_HOLE_Y = 63
 
 // Four full columns sit inside the page (x 6 → 94); the grid overhangs both
@@ -22,14 +22,15 @@ const ROWS = Math.ceil((COVER_H - Y0) / CELL)
 
 export const grid = { x0: X0, y0: Y0, cell: CELL, cols: COLS, rows: ROWS }
 
-/** Top of the title block. */
-export const TITLE_TOP = 15
+/** Top of the title block (just below the top row of pieces). */
+export const TITLE_TOP = 21
 
 /**
- * Missing pieces. Order matches the `authors` display order
- * (Vhugala, Boitumelo, Asanda, Hlulani, Nyiko).
+ * Missing pieces, keyed by what fills them (author id or 'goat-logo').
  *
  *            col 1     col 2     col 3     col 4
+ *   row 0                                  goat logo
+ *   (title)
  *   row 3              Vhugala
  *   row 4    Nyiko                         Hlulani
  *   row 5              Asanda    Boitumelo
@@ -38,13 +39,15 @@ export const TITLE_TOP = 15
  * bottom-left corner, and the two interlock side by side.
  *
  * `sockets` turns a side inward so no knob pokes off the page edge or into
- * the title.
+ * the title; `knobs` forces a side outward (e.g. so a socket doesn't hide a face).
  */
-export const holeCells = [
-  // Vhugala — under the credit line (top knob clears it); bottom knob so her mouth shows
-  { col: 2, row: 3, knobs: ['bottom'] },
-  { col: 3, row: 5 }, // Boitumelo
-  { col: 2, row: 5 }, // Asanda
-  { col: 4, row: 4, sockets: ['right'], knobs: ['left'] }, // Hlulani — page edge on the right
-  { col: 1, row: 4, knobs: ['left'] }, // Nyiko — left knob reaches right up to the page edge
-]
+export const slots = {
+  // top-right corner; its top knob runs off the page, leaving a clean top edge
+  'goat-logo': { col: 4, row: 0, sockets: ['right'] },
+  // under the credit line (top knob clears it); bottom knob so her mouth shows
+  'vhugala-mathivha': { col: 2, row: 3, knobs: ['bottom'] },
+  'boitumelo-magashula': { col: 3, row: 5 },
+  'asanda-thabethe': { col: 2, row: 5 },
+  'hlulani-ndlovu': { col: 4, row: 4, sockets: ['right'], knobs: ['left'] }, // page edge on the right
+  'nyiko-tsonani': { col: 1, row: 4, knobs: ['left'] }, // left knob reaches the page edge
+}
