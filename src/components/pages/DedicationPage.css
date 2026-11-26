@@ -29,7 +29,21 @@
   line-height: 1.65;
 }
 
+/* on its own line below the message */
 .dedication__thanks {
+  display: block;
+  margin-top: 1.2em;
   white-space: nowrap;
   color: #c8102e;
+}
+
+/* sized to the text and slightly tilted, like a hand-placed mark */
+.dedication__heart {
+  display: inline-block;
+  width: 0.95em;
+  height: 0.87em;
+  vertical-align: -0.08em;
+  margin-left: 0.1em;
+  fill: currentColor;
+  transform: rotate(-8deg);
 }
