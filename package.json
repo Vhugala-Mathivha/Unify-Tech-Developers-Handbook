@@ -1,0 +1,34 @@
+{
+  "name": "unify-tech-developers-handbook",
+  "version": "0.1.0",
+  "description": "Unify Tech - The Developers Handbook (ARMS)",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "photos": "node scripts/crop-author-photos.mjs",
+    "cover": "node scripts/clean-cover-template.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Vhugala-Mathivha/Unify-Tech-Developers-Handbook.git"
+  },
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/Vhugala-Mathivha/Unify-Tech-Developers-Handbook/issues"
+  },
+  "homepage": "https://github.com/Vhugala-Mathivha/Unify-Tech-Developers-Handbook#readme",
+  "dependencies": {
+    "@fontsource/lora": "^5.1.0",
+    "@fontsource/playfair-display": "^5.1.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-pageflip": "^2.0.3"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "sharp": "^0.33.5",
+    "vite": "^6.0.7"
+  },
+  "private": true
+}

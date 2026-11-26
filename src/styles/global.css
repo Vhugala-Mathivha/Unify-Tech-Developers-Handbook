@@ -1,0 +1,41 @@
+:root {
+  --ink: #111111;
+  --burgundy: #800020;
+  /* ARMS muted-foreground: oklch(48% .014 255) */
+  --gray: #5d636c;
+  --gray-soft: #8a9099;
+  --paper: #fffdf9;
+  --endpaper: #f2efe9;
+  --scene: #e8e6e2;
+
+  --font-title: 'Playfair Display', 'Times New Roman', serif;
+  --font-body: 'Lora', Georgia, serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: radial-gradient(ellipse at 50% 40%, #f4f3f0 0%, var(--scene) 60%, #dcd9d4 100%);
+  color: var(--ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+.app {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+}

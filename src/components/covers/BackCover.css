@@ -1,0 +1,59 @@
+.back-cover {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 8cqw 7cqw 6cqw;
+}
+
+.back-cover__title {
+  margin: 0 0 5cqw;
+  text-align: center;
+  font-family: var(--font-title);
+  font-weight: 700;
+  font-size: 4.6cqw;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+.back-cover__list {
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.back-cover__row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4.5cqw;
+  align-items: center;
+}
+
+.back-cover__photo {
+  height: 13.2cqh;
+  width: auto;
+}
+
+.back-cover__text {
+  min-width: 0;
+}
+
+.back-cover__text .author-caption__name {
+  font-size: 2.8cqw;
+}
+
+.back-cover__text .author-caption__role {
+  font-size: 2.2cqw;
+  color: var(--burgundy);
+}
+
+.back-cover__takeaway {
+  margin: 1.2cqw 0 0;
+  font-size: 2.45cqw;
+  line-height: 1.45;
+  color: var(--gray);
+}

@@ -1,0 +1,24 @@
+.author-photo {
+  display: block;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  /* soft rounded corners; horizontal / vertical % keeps them circular on 3:4 */
+  border-radius: 10% / 7.5%;
+  background: #eceae6;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.author-caption {
+  line-height: 1.3;
+}
+
+.author-caption__name,
+.author-caption__role {
+  display: block;
+  color: var(--gray);
+}
+
+.author-caption__name {
+  font-weight: 600;
+}
