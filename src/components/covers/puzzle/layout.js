@@ -41,9 +41,10 @@ export const TITLE_TOP = 15
  * the title.
  */
 export const holeCells = [
-  { col: 2, row: 3 }, // Vhugala — under the credit line (top knob clears it)
+  // Vhugala — under the credit line (top knob clears it); bottom knob so her mouth shows
+  { col: 2, row: 3, knobs: ['bottom'] },
   { col: 3, row: 5 }, // Boitumelo
   { col: 2, row: 5 }, // Asanda
-  { col: 4, row: 4, sockets: ['right'] }, // Hlulani — page edge
-  { col: 1, row: 4, sockets: ['left'] }, // Nyiko — page edge
+  { col: 4, row: 4, sockets: ['right'], knobs: ['left'] }, // Hlulani — page edge on the right
+  { col: 1, row: 4, knobs: ['left'] }, // Nyiko — left knob reaches right up to the page edge
 ]

@@ -57,7 +57,7 @@ function mulberry32(seed) {
  * @param {number} o.x0, o.y0   top-left of the grid
  * @param {number} o.cell       cell size (square pieces)
  * @param {number} o.cols, o.rows
- * @param {{col:number,row:number,sockets?:('top'|'left'|'right')[]}[]} [o.holes]
+ * @param {{col:number,row:number,sockets?:('top'|'left'|'right')[],knobs?:('bottom'|'left'|'right')[]}[]} [o.holes]
  *        cells that get "top knob out, bottom socket in" so nothing pokes down
  *        into the caption below; `sockets` forces side edges inward too
  * @param {number} [o.seed]
@@ -75,13 +75,17 @@ export function createJigsaw({ x0, y0, cell, cols, rows, holes = [], seed = 7 })
     Array.from({ length: cols + 1 }, (_, c) => (c === 0 || c === cols ? 0 : flip())),
   )
 
-  for (const { col, row, sockets = [] } of holes) {
+  for (const { col, row, sockets = [], knobs = [] } of holes) {
     h[row][col] = -1 // knob pokes up out of the piece
     h[row + 1][col] = -1 // piece below pokes up into it (socket on the bottom)
     // optional sockets, e.g. to keep knobs off the page edge or away from text
     if (sockets.includes('top')) h[row][col] = 1
     if (sockets.includes('left')) v[row][col] = -1
     if (sockets.includes('right')) v[row][col + 1] = 1
+    // optional knobs sticking out of the piece, e.g. so a socket doesn't hide a face
+    if (knobs.includes('bottom')) h[row + 1][col] = 1
+    if (knobs.includes('left')) v[row][col] = 1
+    if (knobs.includes('right')) v[row][col + 1] = -1
   }
 
   const gridPath = () => {
