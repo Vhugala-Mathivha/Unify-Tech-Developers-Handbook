@@ -51,7 +51,7 @@ const authors = {
   'nyiko-tsonani': {
     portrait: { left: 10, top: 60, width: 640, height: 853 },
     zoomOut: 1.55,
-    extendWith: 'copy',
+    extendWith: 'mirror', // her left knob shows this fill; 'copy' streaks there
     inset: 40, // original has white rounded corners; trim them before extending
   },
 }
