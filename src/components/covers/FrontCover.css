@@ -1,6 +1,7 @@
 /* Sizes use cqw/cqh (the page is a size container) so the cover scales with the book. */
 
 .front-cover {
+  position: relative;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -9,13 +10,15 @@
   background: #ffffff;
 }
 
+/* Title block sits in the clear band between the puzzle gaps (top set in layout.js). */
 .front-cover__top {
-  flex: 0 0 46%;
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding-top: 4cqh;
 }
 
 .front-cover__title {
@@ -42,7 +45,7 @@
 }
 
 .front-cover__credit {
-  margin: 6cqw auto 0;
+  margin: 3.5cqw auto 0;
   max-width: 80%;
   font-style: italic;
   font-size: 2.5cqw;
@@ -50,44 +53,25 @@
   color: var(--burgundy);
 }
 
-.front-cover__authors {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 3.5cqw;
-  padding-bottom: 5cqh;
+/* ---------- Puzzle background ---------- */
+
+.puzzle-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
-.front-cover__row {
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  gap: 1cqw;
+.puzzle-bg__grid {
+  fill: none;
+  stroke: #d7dade;
+  stroke-width: 0.22;
+  stroke-linejoin: round;
 }
 
-.front-cover__author {
-  margin: 0;
-  width: 28.5cqw;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.front-cover__author .author-photo {
-  width: 19cqw;
-}
-
-.front-cover__author .author-caption {
-  margin-top: 1.8cqw;
-}
-
-.front-cover__author .author-caption__name {
-  font-size: 2.6cqw;
-  white-space: nowrap;
-}
-
-.front-cover__author .author-caption__role {
-  font-size: 2.3cqw;
-  white-space: nowrap;
+/* the cut edge around each missing piece */
+.puzzle-bg__hole-edge {
+  fill: none;
+  stroke: #9aa0a8;
+  stroke-width: 0.3;
 }

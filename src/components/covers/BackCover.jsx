@@ -14,7 +14,11 @@ export default function BackCover() {
             <AuthorPhoto author={author} className="back-cover__photo" />
             <div className="back-cover__text">
               <AuthorCaption author={author} />
-              <p className="back-cover__takeaway">{author.takeaway}</p>
+              {author.takeaway ? (
+                <p className="back-cover__takeaway">{author.takeaway}</p>
+              ) : (
+                <p className="back-cover__takeaway back-cover__takeaway--pending">Takeaway coming soon.</p>
+              )}
             </div>
           </li>
         ))}

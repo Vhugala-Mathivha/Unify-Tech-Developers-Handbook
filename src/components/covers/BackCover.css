@@ -57,3 +57,8 @@
   line-height: 1.45;
   color: var(--gray);
 }
+
+.back-cover__takeaway--pending {
+  font-style: italic;
+  color: var(--gray-soft);
+}
