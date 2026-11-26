@@ -11,7 +11,6 @@ npm install
 npm run dev      # http://localhost:5173
 npm run build    # production build in dist/
 npm run photos   # regenerate cropped author portraits from the originals
-npm run cover    # regenerate the front-cover background (template with its placeholder text removed)
 ```
 
 Turn pages by clicking/dragging a page corner, with the arrow buttons, or with the ← → keys.

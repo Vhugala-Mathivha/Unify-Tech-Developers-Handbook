@@ -6,8 +6,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "photos": "node scripts/crop-author-photos.mjs",
-    "cover": "node scripts/clean-cover-template.mjs"
+    "photos": "node scripts/crop-author-photos.mjs"
   },
   "repository": {
     "type": "git",
