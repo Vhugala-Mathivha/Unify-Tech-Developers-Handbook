@@ -22,15 +22,14 @@ const ROWS = Math.ceil((COVER_H - Y0) / CELL)
 
 export const grid = { x0: X0, y0: Y0, cell: CELL, cols: COLS, rows: ROWS }
 
-/** Top of the title block (just below the top row of pieces). */
-export const TITLE_TOP = 21
+/** Top of the header block (goat logo, then title and credit). */
+export const TITLE_TOP = 7
 
 /**
- * Missing pieces, keyed by what fills them (author id or 'goat-logo').
+ * Missing pieces, keyed by the author id whose photo fills them.
  *
  *            col 1     col 2     col 3     col 4
- *   row 0                                  goat logo
- *   (title)
+ *   (logo + title)
  *   row 3              Vhugala
  *   row 4    Nyiko                         Hlulani
  *   row 5              Asanda    Boitumelo
@@ -42,12 +41,10 @@ export const TITLE_TOP = 21
  * the title; `knobs` forces a side outward (e.g. so a socket doesn't hide a face).
  */
 export const slots = {
-  // top-right corner; its top knob runs off the page, leaving a clean top edge
-  'goat-logo': { col: 4, row: 0, sockets: ['right'] },
   // under the credit line (top knob clears it); bottom knob so her mouth shows
   'vhugala-mathivha': { col: 2, row: 3, knobs: ['bottom'] },
   'boitumelo-magashula': { col: 3, row: 5 },
   'asanda-thabethe': { col: 2, row: 5 },
   'hlulani-ndlovu': { col: 4, row: 4, sockets: ['right'], knobs: ['left'] }, // page edge on the right
-  'nyiko-tsonani': { col: 1, row: 4, knobs: ['left'] }, // left knob reaches the page edge
+  'nyiko-tsonani': { col: 1, row: 4, sockets: ['left'] }, // left loop points right, into the piece
 }

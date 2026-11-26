@@ -21,6 +21,17 @@
   align-items: center;
 }
 
+/* Goat logo centred above the title. The image has a white background;
+   multiply drops it so the puzzle lines show through around the goat. */
+.front-cover__logo {
+  display: block;
+  height: 13cqw;
+  width: auto;
+  margin-bottom: 2cqw;
+  mix-blend-mode: multiply;
+  user-select: none;
+}
+
 .front-cover__title {
   margin: 0;
   font-family: var(--font-title);
