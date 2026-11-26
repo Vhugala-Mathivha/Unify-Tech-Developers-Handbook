@@ -5,8 +5,9 @@
 // `spreads` — each with the same fields plus a `heading`.
 import { uiUxChapters } from './uiUx'
 import { frontendChapters } from './frontend'
+import { backendChapters } from './backend'
 
-export const chapters = [...uiUxChapters, ...frontendChapters]
+export const chapters = [...uiUxChapters, ...frontendChapters, ...backendChapters]
 
 /** The spreads of a chapter, whichever way it was written. */
 export const chapterSpreads = (chapter) => chapter.spreads ?? [chapter]

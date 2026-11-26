@@ -97,6 +97,913 @@
     "language": "css",
     "code": ".arms-sidebar[data-collapsed='true'] .arms-sidebar__logo {\n  opacity: 0;\n}\n\n.arms-sidebar[data-collapsed='true'] .arms-sidebar__crest {\n  opacity: 1;\n}"
   },
+  "be-program-services": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Program.cs",
+    "from": 61,
+    "language": "csharp",
+    "code": "const string ArmsCorsPolicy = \"ArmsCors\";\n\nbuilder.Services.AddCors(options =>\n{\n    options.AddPolicy(ArmsCorsPolicy, policy =>\n    {\n        var allowedOrigins = builder.Configuration\n            .GetSection(\"Cors:AllowedOrigins\")\n            .Get<string[]>() ?? [];\n\n        policy.WithOrigins(allowedOrigins)\n              .AllowAnyHeader()\n              .AllowAnyMethod()\n              .AllowCredentials()\n              // Lets the frontend read the server's file name on downloads\n              // (timetable PDF/Word/Excel exports).\n              .WithExposedHeaders(\"Content-Disposition\");\n    });\n});\n\n// =====================================================\n// APPLICATION SERVICES\n// =====================================================\n\nbuilder.Services.AddApplicationServices();\n\n// =====================================================\n// INFRASTRUCTURE SERVICES\n// =====================================================\n\nbuilder.Services.AddInfrastructureServices(\n    builder.Configuration);\n\n// =====================================================\n// TIMETABLE PERSONAL SERVICE\n// =====================================================\n\nbuilder.Services.AddScoped<TimetablePersonalService>();",
+    "notes": {
+      "69": "Allowed origins come from configuration: localhost and the deployed frontend",
+      "77": "Lets the browser read the file name of downloads",
+      "85": "MediatR, FluentValidation and AutoMapper (Application layer)",
+      "91": "Database, auth, email and every feature service (Infrastructure layer)"
+    }
+  },
+  "be-program-pipeline": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Program.cs",
+    "from": 232,
+    "language": "csharp",
+    "code": "var app = builder.Build();\n\n// =====================================================\n// DATABASE INITIALISATION\n// =====================================================\n\nawait app.InitialiseDatabaseAsync();\n\n// =====================================================\n// SWAGGER\n// =====================================================\n\napp.UseSwagger();\n\napp.UseSwaggerUI(options =>\n{\n    options.SwaggerEndpoint(\n        \"/swagger/v1/swagger.json\",\n        \"ARMS API v1\");\n\n    options.RoutePrefix = \"swagger\";\n});\n\n// =====================================================\n// HTTP PIPELINE\n// =====================================================\n\n// HTTPS redirection disabled for local HTTP testing\n// app.UseHttpsRedirection();\n\napp.UseResponseCompression();\n\n// =====================================================\n// CORS\n// =====================================================\n\napp.UseCors(ArmsCorsPolicy);\n\n// =====================================================\n// AUTHENTICATION\n// =====================================================\n\napp.UseAuthentication();\n\n// =====================================================\n// AUTHORIZATION\n// =====================================================\n\napp.UseAuthorization();\n\n// =====================================================\n// CONTROLLERS\n// =====================================================\n\napp.MapControllers();\n\n// Cheap, unauthenticated liveness check (no database access) for\n// an uptime/keep-alive monitor, so the host isn't spun down and\n// students don't wait for a cold start after logging in.\napp.MapGet(\"/health\", () => Results.Ok(new { status = \"ok\" }))\n    .AllowAnonymous();\n",
+    "notes": {
+      "238": "Applies migrations / seeds data before the first request",
+      "262": "Order matters: compression, CORS, then authentication before authorization",
+      "286": "Every [ApiController] class becomes reachable",
+      "291": "A cheap /health URL for uptime monitors, so the free host stays awake"
+    }
+  },
+  "be-host-resilience": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Program.cs",
+    "from": 13,
+    "language": "csharp",
+    "code": "// =====================================================\n// HOST RESILIENCE\n// =====================================================\n//\n// By default, an unhandled exception in ANY IHostedService/\n// BackgroundService (e.g. AcademicCalendarNotificationBackgroundService)\n// stops the entire host - a bug in one background job takes the whole\n// API down. Ignore instead: the offending service stops, everything\n// else (including the API itself) keeps running, and the exception is\n// still logged by the framework.\n//\n\nbuilder.Services.Configure<Microsoft.Extensions.Hosting.HostOptions>(\n    options =>\n    {\n        options.BackgroundServiceExceptionBehavior =\n            Microsoft.Extensions.Hosting.BackgroundServiceExceptionBehavior.Ignore;\n    });",
+    "notes": {
+      "28": "A crashing background job stops itself, not the whole API"
+    }
+  },
+  "be-app-di": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Application/DependencyInjection.cs",
+    "from": 40,
+    "language": "csharp",
+    "code": "    public static IServiceCollection AddApplicationServices(this IServiceCollection services)\n    {\n        var assembly = Assembly.GetExecutingAssembly();\n\n        services.AddMediatR(cfg =>\n        {\n            cfg.RegisterServicesFromAssembly(assembly);\n            cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));\n        });\n\n        services.AddValidatorsFromAssembly(assembly);\n        services.AddAutoMapper(_ => { }, assembly);\n\n        return services;\n    }\n}",
+    "notes": {
+      "42": "Scans this project for handlers, validators and mapping profiles",
+      "47": "Every MediatR request is validated first"
+    }
+  },
+  "be-infra-db": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Extensions/InfrastructureServiceExtensions.cs",
+    "from": 39,
+    "language": "csharp",
+    "code": "        var connectionString =\n            configuration.GetConnectionString(\"DefaultConnection\");\n\n        if (string.IsNullOrWhiteSpace(connectionString))\n        {\n            throw new InvalidOperationException(\n                \"DefaultConnection connection string was not found.\");\n        }\n\n        var maxPoolSize = Math.Clamp(\n            configuration.GetValue<int?>(\"Database:MaxPoolSize\") ?? 10,\n            1,\n            100);\n\n        connectionString = new NpgsqlConnectionStringBuilder(connectionString)\n        {\n            MaxPoolSize = maxPoolSize\n        }.ConnectionString;\n\n        services.AddDbContext<ArmsDbContext>(options =>\n        {\n            options.UseNpgsql(\n                connectionString,\n                npgsql => npgsql.MigrationsAssembly(\n                    typeof(ArmsDbContext).Assembly.FullName));\n        });\n\n        // Timetable DB: optional separate database for timetable tables.\n        var timetableConnection = configuration.GetConnectionString(\"TimetableConnection\")\n                                   ?? connectionString;\n        timetableConnection = new NpgsqlConnectionStringBuilder(timetableConnection)\n        {\n            MaxPoolSize = maxPoolSize\n        }.ConnectionString;\n\n        services.AddDbContext<TimetableDbContext>(options =>\n        {\n            options.UseNpgsql(\n                timetableConnection,\n                npgsql => npgsql.MigrationsAssembly(\n                    typeof(ArmsDbContext).Assembly.FullName));\n        });",
+    "notes": {
+      "48": "Connection pool size from configuration, kept between 1 and 100",
+      "58": "ArmsDbContext: users, venues, bookings, notifications… on PostgreSQL",
+      "66": "TimetableDbContext: the timetable tables, optionally in their own database"
+    }
+  },
+  "be-infra-services": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Extensions/InfrastructureServiceExtensions.cs",
+    "from": 82,
+    "language": "csharp",
+    "code": "        services.AddScoped<DbInitializer>();\n\n        services.AddScoped<IUserRepository, UserRepository>();\n        //services.AddScoped<IDepartmentRepository, DepartmentRepository>();//\n       // services.AddScoped<ITimetableRepository, TimetableRepository>();//\n\n        services.AddScoped<IPasswordHasher, PasswordHasher>();\n        services.AddScoped<ITokenService, TokenService>();\n        services.AddHttpClient<IEmailService, EmailService>(client =>\n        {\n            // Apps Script web apps can take several seconds to spin up\n            // and send (the POST + redirect both count toward this).\n            client.Timeout = TimeSpan.FromSeconds(30);\n        })\n        // EmailService follows the Apps Script result redirect itself,\n        // so a flaky result page doesn't fail an email that was sent.\n        .ConfigurePrimaryHttpMessageHandler(() =>\n            new HttpClientHandler { AllowAutoRedirect = false });\n        services.AddScoped<AcademicPlannerService>();\n        services.AddScoped<TimetableExcelService>();\n        services.AddScoped<TimetablePersonalService>();\n        services.AddScoped<NotificationService>();\n        services.AddScoped<TimetableChangeNotifier>();\n        services.AddScoped<SupportTicketService>();\n        services.AddScoped<AcademicCalendarEventNotificationService>();\n        services.AddScoped<LabBookingNotifier>();\n        services.AddScoped<ILabBookingAccessService, LabBookingAccessService>();\n        services.AddScoped<ILabBookingService, LabBookingService>();\n        services.AddScoped<ILabAccessRequestService, LabAccessRequestService>();\n        services.AddScoped<VenueActivityLogger>();\n        services.AddScoped<IVenueAdminService, VenueAdminService>();\n        services.AddScoped<IGroupTimetableService, GroupTimetableService>();\n        services.AddScoped<ISupportStaffService, SupportStaffService>();\n        services.AddScoped<ISpecialBookingService, SpecialBookingService>();\n        services.AddScoped<AdminRequestReminderService>();\n\n        services.AddHostedService<AcademicCalendarNotificationBackgroundService>();\n        services.AddHostedService<AdminRequestReminderBackgroundService>();\n\n        services.AddArmsAuthentication(configuration);\n\n        return services;",
+    "notes": {
+      "88": "Interfaces live in Application; the implementations are registered here",
+      "90": "EmailService gets its own HttpClient with a 30 s timeout",
+      "100": "Scoped: one instance per HTTP request",
+      "118": "Hosted services run in the background for the life of the API"
+    }
+  },
+  "be-dockerfile": {
+    "repo": "ARMS.Backend",
+    "file": "docker/Dockerfile",
+    "from": 1,
+    "language": "yaml",
+    "code": "# Build stage\nFROM mcr.microsoft.com/dotnet/sdk:10.0 AS build\n\nWORKDIR /src\n\n# Copy project files\nCOPY ARMS.sln ./\nCOPY ARMS.API/ARMS.API.csproj ARMS.API/\nCOPY ARMS.Application/ARMS.Application.csproj ARMS.Application/\nCOPY ARMS.Domain/ARMS.Domain.csproj ARMS.Domain/\nCOPY ARMS.Infrastructure/ARMS.Infrastructure.csproj ARMS.Infrastructure/\n\n# Restore dependencies\nRUN dotnet restore ARMS.API/ARMS.API.csproj\n\n# Copy source code\nCOPY . .\n\n# Build\nRUN dotnet build ARMS.API/ARMS.API.csproj \\\n    -c Release \\\n    --no-restore\n\n# Publish\nRUN dotnet publish ARMS.API/ARMS.API.csproj \\\n    -c Release \\\n    -o /app/publish \\\n    --no-restore\n\n\n# Runtime stage\nFROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final\n\nWORKDIR /app\n\nCOPY --from=build /app/publish .\n\nENV ASPNETCORE_URLS=http://+:5000\n\nEXPOSE 5000\n\nENTRYPOINT [\"dotnet\", \"ARMS.API.dll\"]",
+    "notes": {
+      "2": "Stage 1: the full .NET 10 SDK, to build",
+      "14": "Restore first: this layer is cached while only source files change",
+      "32": "Stage 2: the small ASP.NET runtime image, without the SDK",
+      "38": "The API listens on port 5000 inside the container"
+    }
+  },
+  "be-compose": {
+    "repo": "ARMS.Backend",
+    "file": "docker-compose.yml",
+    "from": 1,
+    "language": "yaml",
+    "code": "services:\n  arms-api:\n    build:\n      context: .\n      dockerfile: docker/Dockerfile\n    ports:\n      - \"5000:5000\"\n    environment:\n      ASPNETCORE_ENVIRONMENT: Development\n      ASPNETCORE_URLS: http://+:5000"
+  },
+  "be-ci": {
+    "repo": "ARMS.Backend",
+    "file": ".github/workflows/ci.yml",
+    "from": 1,
+    "language": "yaml",
+    "code": "# CI workflow placeholder - add build, test, and publish steps\nname: CI\non: [push, pull_request]\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      # The projects target net10.0 (global.json: SDK 10.0.100, rollForward\n      # latestMajor), so the runner needs the .NET 10 SDK - a 9.0 SDK cannot\n      # build net10.0 projects.\n      - uses: actions/setup-dotnet@v4\n        with:\n          dotnet-version: '10.0.x'\n      - run: dotnet restore\n      - run: dotnet build --no-restore\n      - run: dotnet test --no-build --verbosity normal",
+    "notes": {
+      "3": "Runs on every push and pull request",
+      "15": "Restore, build, then run the tests"
+    }
+  },
+  "be-branch-rules": {
+    "repo": "ARMS.Backend",
+    "file": ".github/workflows/branch-rules.yml",
+    "from": 23,
+    "language": "yaml",
+    "code": "          BASE=\"${{ github.event.pull_request.base.ref }}\"\n          HEAD=\"${{ github.event.pull_request.head.ref }}\"\n          \n          # PR targeting main: source must be dev or development\n          if [[ \"$BASE\" == \"main\" || \"$BASE\" == \"master\" ]]; then\n            if [[ \"$HEAD\" != \"dev\" && \"$HEAD\" != \"development\" ]]; then\n              echo \"::error::PRs to main can only come from dev or development. Current source: $HEAD\"\n              exit 1\n            fi\n          fi\n          \n          # PR targeting dev/development: source must NOT be main\n          if [[ \"$BASE\" == \"dev\" || \"$BASE\" == \"development\" ]]; then\n            if [[ \"$HEAD\" == \"main\" || \"$HEAD\" == \"master\" ]]; then\n              echo \"::error::PRs to dev/development cannot come from main. Use a feature branch.\"\n              exit 1\n            fi\n          fi\n          ",
+    "notes": {
+      "27": "Only dev / development may merge into main",
+      "35": "main may not be merged back into dev; use a feature branch"
+    }
+  },
+  "be-jwt-validate": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Extensions/AuthenticationExtensions.cs",
+    "from": 30,
+    "language": "csharp",
+    "code": "        var jwtSecretKey = configuration[\"Jwt:SecretKey\"]\n            ?? throw new InvalidOperationException(\n                \"Jwt:SecretKey is not configured.\");\n\n        if (jwtSecretKey.Length < 32)\n        {\n            throw new InvalidOperationException(\n                \"Jwt:SecretKey must contain at least 32 characters.\");\n        }\n\n        // =====================================================\n        // AUTHENTICATION\n        // =====================================================\n\n        services.AddAuthentication(\n            JwtBearerDefaults.AuthenticationScheme)\n            .AddJwtBearer(options =>\n            {\n                options.TokenValidationParameters =\n                    new TokenValidationParameters\n                    {\n                        ValidateIssuer = true,\n                        ValidateAudience = true,\n                        ValidateLifetime = true,\n                        ValidateIssuerSigningKey = true,\n\n                        ValidIssuer = jwtIssuer,\n                        ValidAudience = jwtAudience,\n\n                        IssuerSigningKey =\n                            new SymmetricSecurityKey(\n                                Encoding.UTF8.GetBytes(\n                                    jwtSecretKey)),\n\n                        // Map role and name claim types to built-in ClaimTypes\n                        RoleClaimType = ClaimTypes.Role,\n                        NameClaimType = ClaimTypes.Name,\n\n                        // Do not allow expired tokens\n                        ClockSkew = TimeSpan.Zero\n                    };\n            });",
+    "notes": {
+      "34": "Refuses to start with a weak signing key",
+      "53": "Expired tokens are rejected…",
+      "69": "…to the second: no clock-skew allowance"
+    }
+  },
+  "be-policies": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Extensions/AuthenticationExtensions.cs",
+    "from": 77,
+    "language": "csharp",
+    "code": "        services.AddAuthorization(options =>\n        {\n            // System Administrator\n            options.AddPolicy(\n                \"SystemAdminPolicy\",\n                policy =>\n                    policy.RequireRole(\"SystemAdmin\"));\n\n            // Timetable Administrator\n            options.AddPolicy(\n                \"TimetableAdminPolicy\",\n                policy =>\n                    policy.RequireRole(\"TimetableAdmin\"));\n\n            // Lecturer\n            options.AddPolicy(\n                \"LecturerPolicy\",\n                policy =>\n                    policy.RequireRole(\"Lecturer\"));\n\n            // Student\n            options.AddPolicy(\n                \"StudentPolicy\",\n                policy =>\n                    policy.RequireRole(\"Student\"));\n\n            // Any authenticated ARMS user\n            options.AddPolicy(\n                \"AuthenticatedUserPolicy\",\n                policy =>\n                    policy.RequireAuthenticatedUser());\n        });",
+    "notes": {
+      "80": "Named policies; most controllers use [Authorize(Roles = \"...\")] directly"
+    }
+  },
+  "be-token-life": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Services/TokenService.cs",
+    "from": 38,
+    "language": "csharp",
+    "code": "    // A token lives for the idle limit only. Each sign-in and each\n    // POST api/auth/keep-alive (sent by the frontend while the user is\n    // active) issues a fresh one, so an active session keeps going while a\n    // session left alone for the idle limit stops working on the server too\n    // - not just in the browser.\n    public int SessionTimeoutMinutes =>\n        int.TryParse(\n            _configuration[\"Session:IdleTimeoutMinutes\"],\n            out int minutes) && minutes > 0\n                ? minutes\n                : DefaultSessionTimeoutMinutes;\n\n    public int TokenLifetimeMinutes =>\n        SessionTimeoutMinutes + TokenGraceMinutes;",
+    "notes": {
+      "43": "Session:IdleTimeoutMinutes (30) from configuration",
+      "50": "Plus 2 minutes of grace for a request already in flight"
+    }
+  },
+  "be-token-claims": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Services/TokenService.cs",
+    "from": 89,
+    "language": "csharp",
+    "code": "        var claims = new List<Claim>\n        {\n            new Claim(\n                ClaimTypes.NameIdentifier,\n                user.user_id.ToString()),\n\n            new Claim(\n                ClaimTypes.Name,\n                $\"{user.full_name} {user.surname}\"),\n\n            new Claim(\n                ClaimTypes.Email,\n                user.email),\n\n            new Claim(\n                ClaimTypes.Role,\n                roleName),\n\n            new Claim(\n                \"RoleId\",\n                user.role_id.ToString())\n        };",
+    "notes": {
+      "91": "The user id: controllers read it back with User.FindFirst(...)",
+      "103": "The role drives every [Authorize(Roles = ...)] check"
+    }
+  },
+  "be-token-sign": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Services/TokenService.cs",
+    "from": 140,
+    "language": "csharp",
+    "code": "        var securityKey =\n            new SymmetricSecurityKey(\n                Encoding.UTF8.GetBytes(key));\n\n        var credentials =\n            new SigningCredentials(\n                securityKey,\n                SecurityAlgorithms.HmacSha256);\n\n        // =====================================================\n        // CREATE TOKEN\n        // =====================================================\n\n        var token = new JwtSecurityToken(\n            issuer: issuer,\n            audience: audience,\n            claims: claims,\n            expires: DateTime.UtcNow.AddMinutes(\n                expiryMinutes),\n            signingCredentials: credentials);\n\n        // =====================================================\n        // RETURN TOKEN\n        // =====================================================\n\n        return new JwtSecurityTokenHandler()\n            .WriteToken(token);",
+    "notes": {
+      "146": "HMAC-SHA256 signature with the secret key"
+    }
+  },
+  "be-login-find": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/AuthController.cs",
+    "from": 348,
+    "language": "csharp",
+    "code": "        var email = request.Email\n            .Trim()\n            .ToLowerInvariant();\n\n        // =====================================================\n        // FIND USER AND ROLE\n        // =====================================================\n\n        var user = await _context.Users\n            .Include(u => u.Role)\n            .FirstOrDefaultAsync(u =>\n                u.email.ToLower() == email);\n\n        if (user == null)\n        {\n            return NotFound(new\n            {\n                message =\n                    \"Account does not exist. Please register before signing in.\",\n\n                accountExists = false,\n\n                requiresRegistration = true,\n\n                email\n            });\n        }\n\n        if (user.Role == null)\n        {\n            return Unauthorized(new\n            {\n                message = \"This account has no role assigned.\"\n            });\n        }\n\n        // =====================================================\n        // CHECK PASSWORD\n        // =====================================================\n\n        var validPassword =\n            _passwordHasher.VerifyPassword(\n                request.Password,\n                user.password_hash);\n\n        if (!validPassword)\n        {\n            return Unauthorized(new\n            {\n                message = \"Incorrect password.\"\n            });\n        }",
+    "notes": {
+      "348": "Emails are compared in lower case",
+      "363": "Note: a different message for unknown accounts tells callers which emails exist",
+      "389": "BCrypt check (see Password hashing & reset)"
+    }
+  },
+  "be-login-otp": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/AuthController.cs",
+    "from": 405,
+    "language": "csharp",
+    "code": "        var previousOtps = await _context.Otps\n            .Where(o =>\n                o.email == user.email &&\n                !o.is_used)\n            .ToListAsync();\n\n        foreach (var previousOtp in previousOtps)\n        {\n            previousOtp.is_used = true;\n        }\n\n        // =====================================================\n        // GENERATE OTP\n        // =====================================================\n\n        var otp = GenerateOtp();\n\n        var otpHash =\n            BCrypt.Net.BCrypt.HashPassword(otp);\n\n        // =====================================================\n        // CREATE OTP RECORD\n        // =====================================================\n\n        var otpRecord = new Otp\n        {\n            email = user.email,\n            code_hash = otpHash,\n            created_at = DateTime.UtcNow,\n            expires_at = DateTime.UtcNow.AddMinutes(5),\n            is_used = false,\n            attempts = 0\n        };\n\n        _context.Otps.Add(otpRecord);\n\n        try\n        {\n            await _context.SaveChangesAsync();\n        }\n        catch\n        {\n            return StatusCode(\n                StatusCodes.Status500InternalServerError,\n                new\n                {\n                    message =\n                        \"Unable to create OTP. Please try again.\"\n                });\n        }",
+    "notes": {
+      "405": "Any older unused code stops working",
+      "422": "Only a BCrypt hash of the code is stored, never the code itself",
+      "434": "Valid for 5 minutes"
+    }
+  },
+  "be-generate-otp": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/AuthController.cs",
+    "from": 689,
+    "language": "csharp",
+    "code": "    private static string GenerateOtp()\n    {\n        return RandomNumberGenerator\n            .GetInt32(100000, 1000000)\n            .ToString();\n    }",
+    "notes": {
+      "691": "Cryptographically secure random number, 100000–999999"
+    }
+  },
+  "be-login-email": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/AuthController.cs",
+    "from": 460,
+    "language": "csharp",
+    "code": "        try\n        {\n            await _emailService.SendOtpAsync(\n                user.email,\n                $\"{user.full_name} {user.surname}\",\n                otp);\n        }\n        catch\n        {\n            // While OtpLogFallback is on, a failed email (e.g. the mail\n            // script's daily quota) doesn't block sign-in for any role: the\n            // OTP stays valid and the verification screen opens, and the code\n            // is taken from the server logs (SendOtpAsync has already written\n            // it there - only the team with Render access can see them).\n            if (OtpLogFallback)\n            {\n                return Ok(new\n                {\n                    message =\n                        \"The verification code could not be emailed. \" +\n                        \"Use the code from the server logs.\",\n\n                    accountExists = true,\n\n                    requiresOtp = true,\n\n                    email = user.email,\n\n                    expiresInMinutes = 5\n                });\n            }\n\n            otpRecord.is_used = true;\n\n            await _context.SaveChangesAsync();\n\n            return StatusCode(\n                StatusCodes.Status500InternalServerError,\n                new\n                {\n                    message =\n                        \"The OTP could not be sent. Please try again.\"\n                });\n        }",
+    "notes": {
+      "462": "Sent through the email service (Google Apps Script)",
+      "474": "While this flag is on, a failed email still lets sign-in continue; the code is in the server log"
+    }
+  },
+  "be-verify-find": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/AuthController.cs",
+    "from": 746,
+    "language": "csharp",
+    "code": "        var otpRecord = await _context.Otps\n            .Where(o =>\n                o.email == email &&\n                !o.is_used)\n            .OrderByDescending(o => o.created_at)\n            .FirstOrDefaultAsync();\n\n        if (otpRecord == null)\n        {\n            return Unauthorized(new\n            {\n                message = \"Invalid or expired OTP.\"\n            });\n        }\n\n        // =====================================================\n        // CHECK EXPIRATION\n        // =====================================================\n\n        // identity_db.otp stores created_at/expires_at as\n        // \"timestamp without time zone\", and the database session time zone\n        // is Africa/Johannesburg - so the UTC expiry written at login is saved\n        // as local (UTC+2) wall-clock time. Comparing that value in C# with\n        // DateTime.UtcNow made every OTP stay valid for ~2h05m instead of\n        // 5 minutes. Compare inside the database instead, where now() and the\n        // stored value are interpreted in the same session time zone.\n        var hasExpired = await _context.Otps\n            .Where(o => o.otp_id == otpRecord.otp_id)\n            .Select(o => o.expires_at < DateTime.UtcNow)\n            .FirstAsync();\n\n        if (hasExpired)\n        {\n            otpRecord.is_used = true;\n\n            await _context.SaveChangesAsync();\n\n            return Unauthorized(new\n            {\n                message =\n                    \"OTP has expired. Please request a new OTP.\"\n            });\n        }",
+    "notes": {
+      "746": "The newest unused code for this email",
+      "772": "Expiry is compared inside PostgreSQL, so both sides use the same time zone"
+    }
+  },
+  "be-verify-check": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/AuthController.cs",
+    "from": 794,
+    "language": "csharp",
+    "code": "        if (otpRecord.attempts >= 5)\n        {\n            otpRecord.is_used = true;\n\n            await _context.SaveChangesAsync();\n\n            return Unauthorized(new\n            {\n                message =\n                    \"Too many OTP attempts. Please request a new OTP.\"\n            });\n        }\n\n        // =====================================================\n        // INCREMENT ATTEMPTS\n        // =====================================================\n\n        otpRecord.attempts++;\n\n        var otpInput = request.Otp.Trim();\n\n        // =====================================================\n        // VERIFY OTP\n        // =====================================================\n\n        if (!BCrypt.Net.BCrypt.Verify(\n            otpInput,\n            otpRecord.code_hash))\n        {\n            await _context.SaveChangesAsync();\n\n            return Unauthorized(new\n            {\n                message = \"Incorrect OTP.\"\n            });\n        }",
+    "notes": {
+      "794": "Five wrong tries and the code is burned",
+      "819": "BCrypt compares the typed code with the stored hash"
+    }
+  },
+  "be-verify-success": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/AuthController.cs",
+    "from": 904,
+    "language": "csharp",
+    "code": "        // SUCCESS RESPONSE\n        // =====================================================\n\n        var profile = await BuildUserProfileAsync(\n            user,\n            studentNumber,\n            staffNumber);\n\n        return Ok(new VerifyOtpSuccessResponseDto\n        {\n            message = \"OTP verified. Login successful.\",\n            token = token,\n            user = profile,\n            sessionTimeoutMinutes = _tokenService.SessionTimeoutMinutes\n        });",
+    "notes": {
+      "915": "The JWT the frontend sends on every later request"
+    }
+  },
+  "be-keepalive": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/AuthController.cs",
+    "from": 937,
+    "language": "csharp",
+    "code": "    [Authorize]\n    [HttpPost(\"keep-alive\")]\n    public async Task<IActionResult> KeepAlive()\n    {\n        var userIdValue = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;\n\n        if (!int.TryParse(userIdValue, out var userId))\n        {\n            return Unauthorized(new\n            {\n                message = \"Invalid session.\"\n            });\n        }\n\n        var user = await _context.Users\n            .Include(u => u.Role)\n            .FirstOrDefaultAsync(u => u.user_id == userId);\n\n        if (user == null)\n        {\n            return Unauthorized(new\n            {\n                message = \"Account not found.\"\n            });\n        }\n\n        var sessionMinutes = _tokenService.SessionTimeoutMinutes;\n\n        return Ok(new\n        {\n            message = \"Session extended.\",\n            token = _tokenService.GenerateToken(user),\n            expiresAtUtc = DateTime.UtcNow.AddMinutes(_tokenService.TokenLifetimeMinutes),\n            sessionTimeoutMinutes = sessionMinutes\n        });\n    }",
+    "notes": {
+      "937": "Needs a token that is still valid",
+      "951": "Rebuilt from the account as it is now: a deleted account cannot stay signed in",
+      "968": "A fresh token with a new 30-minute lifetime"
+    }
+  },
+  "be-hasher": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Services/PasswordHasher.cs",
+    "from": 15,
+    "language": "csharp",
+    "code": "    public bool VerifyPassword(\n        string password,\n        string passwordHash)\n    {\n        if (string.IsNullOrWhiteSpace(password))\n            return false;\n\n        if (string.IsNullOrWhiteSpace(passwordHash))\n            return false;\n\n        // Detect legacy plaintext passwords stored directly in the\n        // database (pre-seeded accounts). If the stored value is not\n        // a BCrypt hash, fall back to a plaintext comparison.\n        if (!IsBcryptHash(passwordHash))\n        {\n            return password == passwordHash;\n        }\n\n        return BCrypt.Net.BCrypt.Verify(\n            password,\n            passwordHash);\n    }\n\n    private static bool IsBcryptHash(string value)\n    {\n        // BCrypt hashes look like: $2a$10$..., $2b$..., $2y$...\n        // with a version, cost, and 22-char salt + 31-char hash.\n        return value.Length >= 60\n            && value[0] == '$'\n            && (value.StartsWith(\"$2a$\")\n                || value.StartsWith(\"$2b$\")\n                || value.StartsWith(\"$2y$\")\n                || value.StartsWith(\"$2x$\"));\n    }",
+    "notes": {
+      "28": "Watch out: seeded accounts may still hold plain-text passwords; these are compared directly",
+      "33": "Normal path: BCrypt (salted, slow on purpose)"
+    }
+  },
+  "be-password-rules": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Services/PasswordHasher.cs",
+    "from": 50,
+    "language": "csharp",
+    "code": "    private static void ValidatePassword(string password)\n    {\n        if (string.IsNullOrWhiteSpace(password))\n        {\n            throw new ArgumentException(\n                \"Password is required.\");\n        }\n\n        // Maximum 13 characters\n        if (password.Length > 13)\n        {\n            throw new ArgumentException(\n                \"Password must not exceed 13 characters.\");\n        }\n\n        // Minimum 6 characters\n        if (password.Length < 6)\n        {\n            throw new ArgumentException(\n                \"Password must be at least 6 characters.\");\n        }\n\n        bool hasLetter =\n            password.Any(char.IsLetter);\n\n        bool hasNumber =\n            password.Any(char.IsDigit);\n\n        bool hasSpecial =\n            password.Any(\n                c => !char.IsLetterOrDigit(c));\n\n        if (!hasLetter)\n        {\n            throw new ArgumentException(\n                \"Password must contain at least one alphabet letter.\");\n        }\n\n        if (!hasNumber)\n        {\n            throw new ArgumentException(\n                \"Password must contain at least one number.\");\n        }\n\n        if (!hasSpecial)\n        {\n            throw new ArgumentException(\n                \"Password must contain at least one special character.\");\n        }\n    }",
+    "notes": {
+      "58": "6–13 characters, with a letter, a number and a special character"
+    }
+  },
+  "be-reset": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/PasswordResetController.cs",
+    "from": 19,
+    "language": "csharp",
+    "code": "    [HttpGet(\"student\")]\n    public IActionResult StudentPasswordReset()\n    {\n        var resetUrl = _configuration[\"Authentication:PasswordResetUrl\"];\n\n        if (string.IsNullOrWhiteSpace(resetUrl))\n        {\n            return StatusCode(\n                StatusCodes.Status500InternalServerError,\n                new\n                {\n                    message = \"Password reset URL is not configured.\"\n                });\n        }\n\n        return Redirect(resetUrl);\n    }",
+    "notes": {
+      "22": "ARMS does not store reset tokens: it sends users to the TUT4Life reset page"
+    }
+  },
+  "be-reset-auth": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/AuthController.cs",
+    "from": 313,
+    "language": "csharp",
+    "code": "    [HttpGet(\"reset-password\")]\n    public IActionResult ResetPassword()\n    {\n        return Ok(new\n        {\n            message = \"Use the TUT password reset page.\",\n            resetUrl =\n                \"https://tut4life.tut.ac.za/password/\"\n        });\n    }"
+  },
+  "be-run-helper": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/LabBookingsController.cs",
+    "from": 213,
+    "language": "csharp",
+    "code": "    private async Task<IActionResult> Run(Func<Task<IActionResult>> action)\n    {\n        try\n        {\n            return await action();\n        }\n        catch (ArgumentException ex)\n        {\n            return BadRequest(new { message = ex.Message });\n        }\n        catch (UnauthorizedAccessException ex)\n        {\n            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });\n        }\n        catch (KeyNotFoundException ex)\n        {\n            return NotFound(new { message = ex.Message });\n        }\n        catch (InvalidOperationException ex)\n        {\n            return Conflict(new { message = ex.Message });\n        }\n    }",
+    "notes": {
+      "213": "Services throw ordinary .NET exceptions; this maps each to an HTTP status",
+      "219": "Bad input → 400",
+      "223": "Not allowed → 403",
+      "227": "Missing → 404",
+      "231": "Breaks a rule (e.g. the slot is taken) → 409"
+    }
+  },
+  "be-exception-mw": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Middleware/ExceptionHandlingMiddleware.cs",
+    "from": 61,
+    "language": "csharp",
+    "code": "    private async Task HandleExceptionAsync(HttpContext context, Exception exception)\n    {\n        var (statusCode, title, errors) = exception switch\n        {\n            NotFoundException notFound =>\n                (HttpStatusCode.NotFound, \"Resource Not Found\",\n                    new[] { notFound.Message }),\n\n            ValidationException validation =>\n                (HttpStatusCode.BadRequest, \"Validation Failed\",\n                    validation.Errors.SelectMany(e => e.Value).ToArray()),\n\n            ForbiddenException =>\n                (HttpStatusCode.Forbidden, \"Forbidden\",\n                    new[] { \"You do not have permission to perform this action.\" }),\n\n            DomainRuleViolationException domain =>\n                (HttpStatusCode.UnprocessableEntity, \"Business Rule Violation\",\n                    new[] { domain.Message }),\n\n            NotImplementedException notImplemented =>\n                (HttpStatusCode.NotImplemented, \"Not Implemented\",\n                    new[] { notImplemented.Message }),\n\n            _ =>\n                (HttpStatusCode.InternalServerError, \"An unexpected error occurred.\",\n                    _env.IsDevelopment()\n                        ? new[] { exception.Message, exception.StackTrace ?? string.Empty }\n                        : new[] { \"Please try again or contact support.\" })\n        };\n\n        if (statusCode == HttpStatusCode.InternalServerError)\n            _logger.LogError(exception, \"Unhandled exception on {Method} {Path}\",\n                context.Request.Method, context.Request.Path);\n        else\n            _logger.LogDebug(exception, \"Handled exception: {ExceptionType}\", exception.GetType().Name);",
+    "notes": {
+      "63": "Typed exceptions → status codes, as RFC 7807 Problem Details",
+      "87": "Stack traces only in Development"
+    }
+  },
+  "be-base-response": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Application/Common/BaseResponse.cs",
+    "from": 30,
+    "language": "csharp",
+    "code": "public class BaseResponse<T>\n{\n    public bool IsSuccess { get; private set; }\n    public T? Data { get; private set; }\n    public IReadOnlyList<string> Errors { get; private set; } = [];\n\n    private BaseResponse() { }\n\n    public static BaseResponse<T> Success(T data) => new()\n    {\n        IsSuccess = true,\n        Data = data\n    };\n\n    public static BaseResponse<T> Failure(params string[] errors) => new()\n    {\n        IsSuccess = false,\n        Errors = errors\n    };\n\n    public static BaseResponse<T> ValidationFailure(IEnumerable<string> errors) => new()\n    {\n        IsSuccess = false,\n        Errors = errors.ToList().AsReadOnly()\n    };\n}",
+    "notes": {
+      "30": "The result envelope the MediatR handlers return"
+    }
+  },
+  "be-cqrs-controller": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/DepartmentsController.cs",
+    "from": 33,
+    "language": "csharp",
+    "code": "[ApiController]\n[Route(\"api/[controller]\")]\n[Authorize]\npublic class DepartmentsController : ControllerBase\n{\n    private readonly IMediator _mediator;\n\n    public DepartmentsController(IMediator mediator)\n    {\n        _mediator = mediator;\n    }\n\n    [HttpGet]\n    public async Task<ActionResult<BaseResponse<IReadOnlyList<DepartmentDto>>>> GetAll(CancellationToken cancellationToken)\n    {\n        var result = await _mediator.Send(new GetAllDepartmentsQuery(), cancellationToken);\n        return Ok(result);\n    }\n\n    [HttpPost]\n    public async Task<ActionResult<BaseResponse<DepartmentDto>>> Create(\n        [FromBody] CreateDepartmentCommand command, CancellationToken cancellationToken)\n    {\n        var result = await _mediator.Send(command, cancellationToken);\n        return Ok(result);\n    }\n}",
+    "notes": {
+      "48": "The controller only sends a request object; MediatR finds its handler"
+    }
+  },
+  "be-cqrs-query": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Application/Features/Departments/Queries/GetAllDepartmentsQuery.cs",
+    "from": 33,
+    "language": "csharp",
+    "code": "public record GetAllDepartmentsQuery : IRequest<BaseResponse<IReadOnlyList<DepartmentDto>>>\n{\n    // No filters yet.\n}\n\n/// <summary>Handler stub — replace NotImplementedException with real logic later.</summary>\npublic class GetAllDepartmentsQueryHandler : IRequestHandler<GetAllDepartmentsQuery, BaseResponse<IReadOnlyList<DepartmentDto>>>\n{\n    public Task<BaseResponse<IReadOnlyList<DepartmentDto>>> Handle(GetAllDepartmentsQuery request, CancellationToken cancellationToken)\n    {\n        throw new NotImplementedException(\"TODO: Implement GetAllDepartmentsQuery handler for ARMS.\");\n    }\n}",
+    "notes": {
+      "33": "A query is a record that declares what it returns",
+      "43": "Still the template placeholder: this handler is not implemented yet"
+    }
+  },
+  "be-validation-behavior": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Application/DependencyInjection.cs",
+    "from": 62,
+    "language": "csharp",
+    "code": "public class ValidationBehavior<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>\n    where TRequest : notnull\n{\n    private readonly IEnumerable<IValidator<TRequest>> _validators;\n\n    public ValidationBehavior(IEnumerable<IValidator<TRequest>> validators)\n    {\n        _validators = validators;\n    }\n\n    public async Task<TResponse> Handle(\n        TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)\n    {\n        if (!_validators.Any()) return await next();\n\n        var context = new ValidationContext<TRequest>(request);\n        var validationResults = await Task.WhenAll(\n            _validators.Select(v => v.ValidateAsync(context, cancellationToken)));\n\n        var failures = validationResults\n            .SelectMany(r => r.Errors)\n            .Where(f => f is not null)\n            .ToList();\n\n        if (failures.Count != 0)\n        {\n            var errorDictionary = failures\n                .GroupBy(f => f.PropertyName, f => f.ErrorMessage)\n                .ToDictionary(g => g.Key, g => g.ToArray());\n\n            throw new ARMS.Application.Common.ValidationException(errorDictionary);\n        }\n\n        return await next();",
+    "notes": {
+      "75": "No validators for this request: go straight to the handler",
+      "78": "All validators run in parallel",
+      "92": "Any failure stops the request before the handler runs"
+    }
+  },
+  "be-email-otp": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Email/EmailService.cs",
+    "from": 30,
+    "language": "csharp",
+    "code": "    public async Task SendOtpAsync(string email, string fullName, string otp)\n    {\n        // Always surface the OTP in the console during development as a\n        // reliable fallback, in case email delivery fails.\n        _logger.LogInformation(\n            \"OTP for {FullName} ({Email}) is: {Otp}\",\n            fullName,\n            email,\n            otp);\n\n        var message =\n            \"<div style=\\\"font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#111111;\\\">\" +\n            $\"Dear {WebUtility.HtmlEncode(fullName)},<br><br>\" +\n            \"Your ARMS verification code is:<br>\" +\n            \"<div style=\\\"margin:12px 0;font-size:28px;font-weight:bold;letter-spacing:6px;color:#0b56a4;\\\">\" +\n            $\"{WebUtility.HtmlEncode(otp)}</div>\" +\n            \"This code will expire in 5 minutes.<br><br>\" +\n            \"If you did not request this code, please ignore this email.<br><br>\" +\n            \"Regards,<br>ARMS\" +\n            \"</div>\";\n\n        await SendAsync(\n            email,\n            \"ARMS Login Verification Code\",\n            WrapWithBanner(message),\n            throwOnFailure: true,\n            isHtml: true);\n    }",
+    "notes": {
+      "34": "Watch out: the code is also written to the server log",
+      "42": "User text is HTML-encoded before it goes into the email"
+    }
+  },
+  "be-email-send": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Email/EmailService.cs",
+    "from": 241,
+    "language": "csharp",
+    "code": "    private async Task SendAsync(\n        string email,\n        string subject,\n        string body,\n        bool throwOnFailure,\n        bool isHtml = false)\n    {\n        if (string.IsNullOrWhiteSpace(email))\n        {\n            return;\n        }\n\n        // appsettings.json ships these as \"\" (not null), so a plain ??\n        // would never reach the environment-variable fallback.\n        var scriptUrl = NullIfBlank(_configuration[\"EmailSettings:MailScriptUrl\"])\n            ?? NullIfBlank(Environment.GetEnvironmentVariable(\"MAIL_SCRIPT_URL\"));\n\n        var secret = NullIfBlank(_configuration[\"EmailSettings:MailSecret\"])\n            ?? NullIfBlank(Environment.GetEnvironmentVariable(\"MAIL_SECRET\"));\n\n        if (scriptUrl == null || secret == null)\n        {\n            var problem =\n                \"Email is not configured (EmailSettings:MailScriptUrl / MailSecret, \" +\n                \"or MAIL_SCRIPT_URL / MAIL_SECRET).\";\n\n            _logger.LogWarning(\"{Problem} Skipped email to {Email}.\", problem, email);\n\n            if (throwOnFailure)\n            {\n                throw new InvalidOperationException(problem);\n            }\n\n            return;\n        }\n\n        try\n        {\n            // The script sends HTML; plain-text bodies are encoded so\n            // line breaks and special characters survive.\n            var html = isHtml\n                ? body\n                : WebUtility.HtmlEncode(body).Replace(\"\\n\", \"<br>\");\n\n            var payload = new { secret, to = email, subject, html };\n\n            using var content = new StringContent(\n                JsonSerializer.Serialize(payload),\n                Encoding.UTF8,\n                \"application/json\");\n\n            using var response = await _httpClient.PostAsync(scriptUrl, content);\n\n            string responseBody;\n\n            if (response.StatusCode is HttpStatusCode.Found\n                    or HttpStatusCode.SeeOther\n                    or HttpStatusCode.MovedPermanently\n                    or HttpStatusCode.TemporaryRedirect\n                && response.Headers.Location != null)\n            {\n                // doPost() has run; now fetch what it returned.\n                var fetched = await TryFetchScriptResultAsync(\n                    new Uri(new Uri(scriptUrl), response.Headers.Location));\n\n                if (fetched == null)\n                {\n                    _logger.LogWarning(\n                        \"Mail script ran for {Email} but its result could not be fetched \" +\n                        \"(Google's result page failed); treating the email as sent.\",\n                        email);\n\n                    return;",
+    "notes": {
+      "255": "Settings first, then the MAIL_SCRIPT_URL / MAIL_SECRET environment variables",
+      "285": "One JSON POST to a Google Apps Script web app, which sends the email",
+      "296": "The script answers with a redirect; ARMS follows it by hand",
+      "306": "If only the result page fails, the email was already sent: do not fail the sign-in"
+    }
+  },
+  "be-cache-region": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Caching/CacheRegion.cs",
+    "from": 13,
+    "language": "csharp",
+    "code": "public sealed class CacheRegion\n{\n    private CancellationTokenSource _source = new();\n\n    public void Apply(\n        ICacheEntry entry,\n        TimeSpan lifetime)\n    {\n        entry.AbsoluteExpirationRelativeToNow = lifetime;\n\n        entry.AddExpirationToken(\n            new CancellationChangeToken(_source.Token));\n    }\n\n    public void Invalidate()\n    {\n        var previous =\n            Interlocked.Exchange(\n                ref _source,\n                new CancellationTokenSource());\n\n        previous.Cancel();\n    }\n}\n\n/// <summary>\n/// Cache regions shared across the app. The DbContexts invalidate\n/// these from SaveChanges whenever the underlying data changes, so\n/// cached reads never outlive an edit.\n/// </summary>\npublic static class CacheRegions\n{\n    /// <summary>\n    /// Per-user timetables and faculty lookups: timetable rows,\n    /// managed timetables, groups, enrolments, modules, courses.\n    /// </summary>\n    public static readonly CacheRegion AcademicData = new();\n\n    /// <summary>\n    /// Academic calendar events (the same for every user).\n    /// </summary>\n    public static readonly CacheRegion AcademicCalendar = new();\n}",
+    "notes": {
+      "23": "Every cached entry is tied to the region’s cancellation token…",
+      "34": "…so cancelling it evicts the whole region at once",
+      "49": "Timetables, groups, enrolments, faculties",
+      "54": "Calendar events (the same for every user)"
+    }
+  },
+  "be-cache-use": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Services/TimetablePersonalService.cs",
+    "from": 503,
+    "language": "csharp",
+    "code": "    public async Task<List<ClassTimetableEntry>> GetStudentClassAsync(\n        int userId)\n    {\n        // A student's timetable takes ~7 sequential database round\n        // trips to build, and only changes when timetable, group or\n        // enrolment data is saved - which evicts this cache.\n        var cached = await _cache.GetOrCreateAsync(\n            $\"timetable:student-class:{userId}\",\n            entry =>\n            {\n                CacheRegions.AcademicData.Apply(\n                    entry,\n                    StudentTimetableCacheLifetime);\n\n                return LoadStudentClassAsync(userId);\n            });\n\n        // Copy so callers can't reorder the shared cached list.\n        return new List<ClassTimetableEntry>(cached!);\n    }",
+    "notes": {
+      "509": "One cache entry per student",
+      "517": "About 7 database round trips, only when not cached",
+      "521": "A copy, so no caller can reorder the shared list"
+    }
+  },
+  "be-cache-invalidate": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Persistence/Context/ArmsDbContext.cs",
+    "from": 697,
+    "language": "csharp",
+    "code": "    private static void InvalidateCacheRegions(\n        (bool Academic, bool Calendar) affected)\n    {\n        if (affected.Academic)\n            CacheRegions.AcademicData.Invalidate();\n\n        if (affected.Calendar)\n            CacheRegions.AcademicCalendar.Invalidate();\n    }\n\n    public override async Task<int> SaveChangesAsync(\n        bool acceptAllChangesOnSuccess,\n        CancellationToken cancellationToken = default)\n    {\n        var affected = GetAffectedCacheRegions();\n\n        var result = await base.SaveChangesAsync(\n            acceptAllChangesOnSuccess,\n            cancellationToken);\n\n        InvalidateCacheRegions(affected);\n\n        return result;\n    }",
+    "notes": {
+      "711": "Which regions do the pending changes touch?",
+      "717": "After a successful save, evict those regions"
+    }
+  },
+  "be-bg-reminders": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Services/AdminRequestReminderBackgroundService.cs",
+    "from": 37,
+    "language": "csharp",
+    "code": "    protected override async Task ExecuteAsync(CancellationToken stoppingToken)\n    {\n        if (!_enabled)\n        {\n            _logger.LogInformation(\"Admin request reminders are switched off (AdminRequestReminders:Enabled = false).\");\n            return;\n        }\n\n        try\n        {\n            await Task.Delay(_startupDelay, stoppingToken);\n        }\n        catch (OperationCanceledException)\n        {\n            return;\n        }\n\n        using var timer = new PeriodicTimer(_interval);\n\n        do\n        {\n            try\n            {\n                using var scope = _services.CreateScope();\n                var reminders = scope.ServiceProvider.GetRequiredService<AdminRequestReminderService>();\n                var result = await reminders.RunAsync(stoppingToken);\n\n                if (result.LapsedBookingRequests > 0 || result.Title != null)\n                {\n                    _logger.LogInformation(\n                        \"Admin request reminders: {Lapsed} lapsed, {Bookings} booking and {Access} lab access request(s) reminded to {Admins} admin(s).\",\n                        result.LapsedBookingRequests, result.BookingRequestsReminded, result.LabAccessRequestsReminded, result.AdminsNotified);\n                }\n            }\n            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)\n            {\n                return;\n            }\n            catch (Exception ex)\n            {\n                // Never let a failed run stop the service; try again next tick.\n                _logger.LogError(ex, \"The admin request reminder run failed.\");\n            }\n        }\n        while (await WaitAsync(timer, stoppingToken));\n    }",
+    "notes": {
+      "54": "PeriodicTimer: every 30 minutes by default",
+      "60": "A new DI scope per run (DbContext is scoped)",
+      "77": "A failed run is logged; the next tick tries again"
+    }
+  },
+  "be-bg-calendar": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Services/AcademicCalendarNotificationBackgroundService.cs",
+    "from": 56,
+    "language": "csharp",
+    "code": "    protected override async Task ExecuteAsync(\n        CancellationToken stoppingToken)\n    {\n        _logger.LogInformation(\n            \"Academic calendar notification background service started. \" +\n            \"Startup check in {Delay}s, then daily at {Hours} UTC.\",\n            _startupDelaySeconds,\n            string.Join(\", \", _notificationHours));\n\n        try\n        {\n            // ---------------------------------------------------------\n            // INITIAL STARTUP DELAY\n            // ---------------------------------------------------------\n\n            if (_startupDelaySeconds > 0)\n            {\n                await Task.Delay(\n                    TimeSpan.FromSeconds(_startupDelaySeconds),\n                    stoppingToken);\n            }\n\n            if (stoppingToken.IsCancellationRequested)\n                return;\n\n            // ---------------------------------------------------------\n            // STARTUP CHECK\n            // ---------------------------------------------------------\n            // Clear today's reminders first so the corrected\n            // 30/14/7/1/0-day interval logic can be delivered again.\n\n            await RunCheckAsync(\n                stoppingToken,\n                clearToday: true);\n        }\n        catch (OperationCanceledException)\n            when (stoppingToken.IsCancellationRequested)\n        {\n            return;\n        }\n\n        // -------------------------------------------------------------\n        // DAILY SCHEDULED CHECKS\n        // -------------------------------------------------------------\n\n        while (!stoppingToken.IsCancellationRequested)\n        {\n            var delay = GetDelayUntilNextRun();\n\n            _logger.LogDebug(\n                \"Next academic calendar notification check in \" +\n                \"{Minutes:F1} minutes.\",\n                delay.TotalMinutes);\n\n            try\n            {\n                await Task.Delay(\n                    delay,\n                    stoppingToken);\n            }\n            catch (OperationCanceledException)\n                when (stoppingToken.IsCancellationRequested)\n            {\n                break;\n            }\n\n            if (stoppingToken.IsCancellationRequested)\n                break;\n\n            await RunCheckAsync(\n                stoppingToken,\n                clearToday: false);\n        }\n\n        _logger.LogInformation(\n            \"Academic calendar notification background service stopped.\");\n    }",
+    "notes": {
+      "87": "A check right after startup…",
+      "103": "…then at the configured hours each day (AcademicCalendar:NotificationHours)"
+    }
+  },
+  "be-lecturer-credentials": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/LecturersController.cs",
+    "from": 153,
+    "language": "csharp",
+    "code": "    [HttpPut(\"user/{userId:int}/credentials\")]\n    [Authorize(Roles = \"SystemAdmin\")]\n    public async Task<IActionResult> UpdateLecturerCredentials(\n        int userId,\n        [FromBody] UpdateLecturerCredentialsDto request)\n    {\n        if (request == null ||\n            (string.IsNullOrWhiteSpace(request.Email) &&\n             string.IsNullOrWhiteSpace(request.NewPassword)))\n        {\n            return BadRequest(new\n            {\n                message = \"Provide an email and/or a newPassword.\"\n            });\n        }\n\n        var lecturer = await _context.Lecturers\n            .Include(l => l.User)\n            .FirstOrDefaultAsync(l => l.user_id == userId);\n\n        if (lecturer?.User == null)\n        {\n            return NotFound(new\n            {\n                message = \"Lecturer record not found.\"\n            });\n        }\n\n        if (!string.IsNullOrWhiteSpace(request.Email))\n        {\n            var email = request.Email.Trim();\n\n            // Lecturers may sign in with either an official TUT staff\n            // address or a personal Gmail address - see AuthController's\n            // LecturerLogin for the matching rule.\n            var staffDomain =\n                _configuration[\"Authentication:StaffEmailDomain\"]\n                ?? \"@tut.ac.za\";\n\n            var lecturerGmailDomain =\n                _configuration[\"Authentication:LecturerGmailDomain\"]\n                ?? \"@gmail.com\";\n\n            var validDomain =\n                email.EndsWith(staffDomain, StringComparison.OrdinalIgnoreCase) ||\n                email.EndsWith(lecturerGmailDomain, StringComparison.OrdinalIgnoreCase);\n\n            if (!validDomain)\n            {\n                return BadRequest(new\n                {\n                    message =\n                        $\"Lecturer email must end with {staffDomain} or {lecturerGmailDomain}.\"\n                });\n            }\n\n            var emailTaken = await _context.Users.AnyAsync(\n                u => u.user_id != userId &&\n                     u.email.ToLower() == email.ToLower());\n\n            if (emailTaken)\n            {\n                return Conflict(new\n                {\n                    message = \"That email is already in use by another account.\"\n                });\n            }\n\n            lecturer.User.email = email;\n        }\n\n        if (!string.IsNullOrWhiteSpace(request.NewPassword))\n        {\n            try\n            {\n                lecturer.User.password_hash =\n                    _passwordHasher.HashPassword(request.NewPassword);\n            }\n            catch (ArgumentException ex)\n            {\n                return BadRequest(new { message = ex.Message });\n            }\n        }\n\n        await _context.SaveChangesAsync();\n\n        return Ok(new\n        {\n            message = \"Lecturer credentials updated successfully.\",\n            lecturer.user_id,\n            email = lecturer.User.email\n        });\n    }",
+    "notes": {
+      "154": "Only a System Admin can change a lecturer’s sign-in details",
+      "196": "Staff address or Gmail only",
+      "209": "Emails must be unique across all users",
+      "228": "Hashed with the same rules as everywhere else"
+    }
+  },
+  "be-faculty-me": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/FacultiesController.cs",
+    "from": 87,
+    "language": "csharp",
+    "code": "    [HttpGet(\"me\")]\n    public async Task<IActionResult> GetMine()\n    {\n        var userIdClaim =\n            User.FindFirst(ClaimTypes.NameIdentifier)?.Value\n            ?? User.FindFirst(\"sub\")?.Value;\n\n        if (!int.TryParse(userIdClaim, out var userId))\n        {\n            return Unauthorized(new\n            {\n                message = \"Invalid user identity.\"\n            });\n        }\n\n        var role = User.FindFirst(ClaimTypes.Role)?.Value;\n\n        // Four sequential lookups that only change when enrolments,\n        // modules, courses, departments or faculties are saved -\n        // which evicts this cache (see CacheRegions).\n        var (faculty, department, notFoundMessage) = await _cache.GetOrCreateAsync(\n            $\"faculty:me:{role}:{userId}\",\n            entry =>\n            {\n                CacheRegions.AcademicData.Apply(\n                    entry,\n                    TimeSpan.FromHours(1));\n\n                return ResolveFacultyAsync(userId, role);\n            });\n\n        if (faculty == null)\n        {\n            return NotFound(new\n            {\n                message = notFoundMessage\n            });\n        }\n\n        return Ok(new\n        {\n            message = \"Faculty retrieved successfully.\",\n            faculty,\n            // The user's own department (from their courses' department_id).\n            // Course names don't always contain it - e.g. \"Diploma in\n            // Multimedia Computing\" belongs to Computer Science.\n            department\n        });\n    }",
+    "notes": {
+      "107": "Cached per user for an hour, evicted whenever academic data is saved"
+    }
+  },
+  "be-group-students": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/GroupsController.cs",
+    "from": 44,
+    "language": "csharp",
+    "code": "    [HttpGet(\"{groupId:int}/students\")]\n    public async Task<IActionResult> GetStudentsInGroup(int groupId)\n    {\n        var group = await _context.Groups\n            .FirstOrDefaultAsync(g => g.group_id == groupId && !g.is_deleted);\n\n        if (group == null)\n        {\n            return NotFound(new\n            {\n                message = \"Group not found.\"\n            });\n        }\n\n        var studentIds = await _context.StudentGroups\n            .Where(sg => sg.group_id == groupId && sg.is_active)\n            .Select(sg => sg.student_id)\n            .Distinct()\n            .ToListAsync();\n\n        var source = \"group_allocation\";\n\n        if (studentIds.Count == 0)\n        {\n            var groupName = group.name.Trim().ToLower();\n\n            studentIds = await _context.StudentGroups\n                .Where(sg =>\n                    sg.group_id == null &&\n                    sg.module_id == group.module_id &&\n                    sg.is_active &&\n                    sg.name.Trim().ToLower() == groupName)\n                .Select(sg => sg.student_id)\n                .Distinct()\n                .ToListAsync();\n\n            if (studentIds.Count > 0)\n            {\n                source = \"group_allocation_legacy_name_match\";\n            }\n        }\n\n        List<int> userIds;\n\n        if (studentIds.Count > 0)\n        {\n            userIds = await _context.Students\n                .Where(s => studentIds.Contains(s.student_id))\n                .Select(s => s.user_id)\n                .ToListAsync();\n        }\n        else\n        {\n            source = \"module_enrollment_estimate\";\n\n            // Students already allocated to another group of this module\n            // belong to that group's roster - listing them here as well",
+    "notes": {
+      "58": "First choice: students allocated to this group",
+      "66": "Fallback: older rows that match the group by name",
+      "97": "Last resort: an estimate from module enrolments"
+    }
+  },
+  "be-upload-auth": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/CreateTimetable.cs",
+    "from": 10,
+    "language": "csharp",
+    "code": "[Route(\"api/[controller]\")]\n[Authorize(Roles = \"SystemAdmin\")]\npublic class CreateTimetable : ControllerBase",
+    "notes": {
+      "11": "Every endpoint in this controller is System Admin only"
+    }
+  },
+  "be-upload-class": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/CreateTimetable.cs",
+    "from": 52,
+    "language": "csharp",
+    "code": "    [HttpPost(\"upload/class\")]\n    [Consumes(\"multipart/form-data\")]\n    public async Task<IActionResult> UploadClass(\n        IFormFile file,\n        [FromForm] string? name = null,\n        [FromForm] int? academicYear = null,\n        [FromForm] string? academicPeriod = null,\n        [FromForm] int? facultyId = null)\n    {\n        if (file == null)\n        {\n            return BadRequest(new\n            {\n                message = \"No file was uploaded.\"\n            });\n        }\n\n        if (file.Length == 0)\n        {\n            return BadRequest(new\n            {\n                message = \"The uploaded file is empty.\"\n            });\n        }\n\n        var extension =\n            Path.GetExtension(file.FileName)\n                .ToLowerInvariant();\n\n        if (extension != \".xlsx\" &&\n            extension != \".xls\")\n        {\n            return BadRequest(new\n            {\n                message =\n                    \"Only Excel files (.xlsx or .xls) are allowed.\"\n            });\n        }\n\n        try\n        {\n            var uploadResult =\n                await _excelService\n                    .UploadClassTimetableAsync(\n                        file,\n                        GetCurrentUserId(),\n                        name,\n                        academicYear,\n                        academicPeriod,\n                        facultyId);",
+    "notes": {
+      "53": "multipart/form-data: the file plus its details",
+      "81": ".xlsx or .xls only",
+      "95": "Parses the sheets and saves a Pending managed timetable"
+    }
+  },
+  "be-upload-clash-alert": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/CreateTimetable.cs",
+    "from": 103,
+    "language": "csharp",
+    "code": "            try\n            {\n                var clashReport = await _timetableService.GetClassClashesAsync(\n                    uploadResult.ManagedTimetableId);\n\n                var sameSemesterClashes = clashReport.Clashes\n                    .Where(clash => clash.SameSemester)\n                    .ToList();\n\n                if (sameSemesterClashes.Count > 0)\n                {\n                    await _notifications.NotifyRoleAsync(\n                        NotificationType.Administrative,\n                        \"Same-semester timetable clash detected\",\n                        $\"{sameSemesterClashes.Count} same-semester clash(es) \" +\n                        $\"were found in '{name ?? \"the uploaded class timetable\"}'.\",\n                        UserRole.SystemAdmin,\n                        classTimetableId: uploadResult.ManagedTimetableId);\n                }\n            }\n            catch (Exception clashCheckException)\n            {\n                _logger.LogWarning(\n                    clashCheckException,\n                    \"Could not check or notify system admins about timetable {TimetableId} clashes.\",\n                    uploadResult.ManagedTimetableId);\n            }\n\n            return Ok(new\n            {\n                message =\n                    \"Class timetable uploaded successfully. \" +\n                    \"It is Pending until published.\",\n                result = uploadResult.Message\n            });\n        }\n        catch (InvalidUploadFileException ex)\n        {\n            // The file isn't a class timetable (e.g. any other workbook).\n            return BadRequest(new\n            {\n                message = ex.Message\n            });\n        }\n        catch (Exception ex)\n        {\n            return StatusCode(\n                StatusCodes.Status500InternalServerError,\n                new\n                {\n                    message =\n                        \"An error occurred while uploading the class timetable.\",\n                    error = ex.Message\n                });\n        }\n    }",
+    "notes": {
+      "105": "The clash check runs straight after the upload",
+      "114": "Same-semester clashes alert every System Admin",
+      "123": "A failed check never fails the upload itself",
+      "139": "Not a class timetable workbook → 400 with a clear message"
+    }
+  },
+  "be-excel-sheets": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Services/TimetableExcelService.cs",
+    "from": 130,
+    "language": "csharp",
+    "code": "        var lecturerCache =\n            new Dictionary<string, int?>(\n                StringComparer.OrdinalIgnoreCase);\n\n        var lecturerModuleCache =\n            new Dictionary<string, int>();\n\n        var groupCache =\n            new Dictionary<string, Group>();\n\n        // Each entry's group (new groups have no id until the batched save)\n        // and the (group, day, start, venue) keys already added.\n        var entryGroups =\n            new Dictionary<ClassTimetableEntry, Group>(ReferenceEqualityComparer.Instance);\n\n        var entryKeys =\n            new HashSet<(Group, string, TimeOnly, string)>();\n\n        // Sessions whose LECTURER cell names the HOD (a placeholder) - see\n        // HodPlaceholderMarker. Only the lecturer clash report reads this.\n        var hodEntries =\n            new HashSet<ClassTimetableEntry>(ReferenceEqualityComparer.Instance);\n\n        foreach (var table in GetDataTables(file, useHeaderRow: false))\n        {\n            // Only process slot sheets A-H.\n            var sheetName =\n                (table.TableName ?? string.Empty).Trim();\n\n            if (!Regex.IsMatch(sheetName, \"^[A-Ha-h]$\"))\n            {\n                continue;\n            }\n\n            var slot =\n                $\"Slot {sheetName.ToUpperInvariant()}\";\n\n            // Find the CODE header row.\n            var headerRowIndex =\n                FindClassHeaderRow(table);\n\n            if (headerRowIndex < 0)\n            {\n                var reason =\n                    $\"Sheet '{sheetName}': no CODE header row found\";\n\n                AddSkip(skipReasons, reason);\n                continue;\n            }\n\n            var col =\n                MapClassColumns(\n                    table.Rows[headerRowIndex]);\n\n            // Build weekday / venue columns.\n            var weekdayColumns =\n                BuildWeekdayColumns(\n                    table,\n                    headerRowIndex,\n                    col.FirstVenueColumn);\n\n            if (weekdayColumns.Count == 0)\n            {\n                var reason =\n                    $\"Sheet '{sheetName}': no weekday/time columns\";\n\n                AddSkip(skipReasons, reason);\n                continue;\n            }\n",
+    "notes": {
+      "130": "Caches so each lecturer / group / module is looked up once per upload",
+      "153": "ExcelDataReader reads every sheet as a table",
+      "159": "Only the slot sheets A–H hold classes",
+      "168": "Find the header row that starts with CODE"
+    }
+  },
+  "be-excel-rows": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Services/TimetableExcelService.cs",
+    "from": 200,
+    "language": "csharp",
+    "code": "            string? currentCode = null;\n            string? currentCourse = null;\n\n            for (\n                var r = headerRowIndex + 1;\n                r < table.Rows.Count;\n                r++)\n            {\n                var row = table.Rows[r];\n\n                var codeCell =\n                    GetCol(row, col.Code);\n\n                var courseCell =\n                    GetCol(row, col.Course);\n\n                var grCell =\n                    GetCol(row, col.Gr);\n\n                var itsGrCell =\n                    GetCol(row, col.ItsGr);\n\n                var lecturerCell =\n                    GetCol(row, col.Lecturer);\n\n                var snrCell =\n                    GetCol(row, col.Snr);\n\n                var specialCell =\n                    GetCol(row, col.Special);\n\n                var numPerGrpCell =\n                    GetCol(row, col.NumPerGrp);\n\n                // Completely empty row.\n                if (IsRowBlank(row))\n                {\n                    continue;\n                }\n\n                // Section separators.\n                if (\n                    codeCell != null &&\n                    codeCell.EndsWith(\n                        \":\",\n                        StringComparison.Ordinal))\n                {\n                    continue;\n                }\n\n                // CODE fills down.\n                if (!string.IsNullOrWhiteSpace(codeCell))\n                {\n                    currentCode =\n                        NormalizeModuleCode(codeCell);\n                }\n",
+    "notes": {
+      "234": "Blank rows and “Section:” separators are skipped",
+      "251": "A module code fills down to the rows below it, like merged cells"
+    }
+  },
+  "be-publish": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/TimetablesController.cs",
+    "from": 273,
+    "language": "csharp",
+    "code": "    [HttpPut(\"{id:int}/publish\")]\n    public async Task<IActionResult> Publish(int id)\n    {\n        var timetable = await _context.ManagedTimetables\n            .FirstOrDefaultAsync(m => m.managed_timetable_id == id);\n\n        if (timetable == null)\n        {\n            return NotFound(new\n            {\n                message = \"Timetable not found.\"\n            });\n        }\n\n        // The timetable(s) live for this type + faculty until now - what the\n        // change alerts compare the newly published one against.\n        var previousTimetableIds = await _context.ManagedTimetables\n            .Where(m =>\n                m.type == timetable.type &&\n                m.faculty_id == timetable.faculty_id &&\n                m.status == \"Published\" &&\n                m.managed_timetable_id != timetable.managed_timetable_id)\n            .Select(m => m.managed_timetable_id)\n            .ToListAsync();\n\n        await DeactivateOtherPublishedAsync(timetable);\n\n        timetable.status = \"Published\";\n        timetable.updated_at = DateTime.UtcNow;\n\n        await _context.SaveChangesAsync();\n\n        QueueChangeAlerts(\n            timetable.managed_timetable_id,\n            previousTimetableIds,\n            timetable.type);\n\n        try\n        {\n            await _notifications.NotifyRoleAsync(\n                NotificationType.Admin,\n                $\"{timetable.name} published\",\n                $\"{timetable.name} has been published. Check your timetable for the update.\",\n                UserRole.Lecturer);\n        }\n        catch (Exception)\n        {\n            // Never let a notification failure undo the publish.\n        }\n\n        return Ok(new\n        {\n            message = \"Timetable published.\",\n            timetable.managed_timetable_id,\n            timetable.status\n        });\n    }",
+    "notes": {
+      "289": "The currently live timetables of this type and faculty",
+      "298": "Only one can be live: the others become Inactive",
+      "305": "Change alerts run in the background",
+      "316": "Lecturers are told to check their timetable"
+    }
+  },
+  "be-deactivate-others": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/TimetablesController.cs",
+    "from": 542,
+    "language": "csharp",
+    "code": "    // Only one entry per (type, faculty) can be the live one at a\n    // time - e.g. publishing ICT's Class Timetable does not affect\n    // Engineering's. A null faculty_id is its own \"lane\" too.\n    private Task<int> DeactivateOtherPublishedAsync(ManagedTimetable timetable)\n    {\n        return _context.ManagedTimetables\n            .Where(m =>\n                m.type == timetable.type &&\n                m.faculty_id == timetable.faculty_id &&\n                m.status == \"Published\" &&\n                m.managed_timetable_id != timetable.managed_timetable_id)\n            .ExecuteUpdateAsync(s => s\n                .SetProperty(m => m.status, \"Inactive\")\n                .SetProperty(m => m.updated_at, DateTime.UtcNow));\n    }",
+    "notes": {
+      "553": "ExecuteUpdateAsync: one UPDATE statement, no entities loaded"
+    }
+  },
+  "be-change-alerts": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/TimetablesController.cs",
+    "from": 508,
+    "language": "csharp",
+    "code": "    private void QueueChangeAlerts(\n        int publishedTimetableId,\n        List<int> previousTimetableIds,\n        string timetableType)\n    {\n        if (previousTimetableIds.Count == 0)\n        {\n            return; // First publish for this type + faculty - nothing to compare with.\n        }\n\n        _ = Task.Run(async () =>\n        {\n            try\n            {\n                using var scope = _scopeFactory.CreateScope();\n\n                var notifier = scope.ServiceProvider\n                    .GetRequiredService<TimetableChangeNotifier>();\n\n                await notifier.NotifyPublishedChangesAsync(\n                    publishedTimetableId,\n                    previousTimetableIds,\n                    timetableType);\n            }\n            catch (Exception ex)\n            {\n                _logger.LogError(\n                    ex,\n                    \"Timetable change alerts failed for published timetable {TimetableId}.\",\n                    publishedTimetableId);\n            }\n        });\n    }",
+    "notes": {
+      "513": "First publish for this type and faculty: nothing to compare",
+      "518": "Fire-and-forget, so the publish answers at once",
+      "522": "Its own DI scope, because the request’s scope ends when it returns"
+    }
+  },
+  "be-change-diff": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Services/TimetableChangeNotifier.cs",
+    "from": 99,
+    "language": "csharp",
+    "code": "    private static List<GroupChange> DiffClassSessions(\n        IReadOnlyList<ClassSession> before,\n        IReadOnlyList<ClassSession> after)\n    {\n        var beforeByGroup = GroupSessions(before);\n        var afterByGroup = GroupSessions(after);\n\n        var changes = new List<GroupChange>();\n\n        foreach (var key in beforeByGroup.Keys.Union(afterByGroup.Keys))\n        {\n            beforeByGroup.TryGetValue(key, out var oldSessions);\n            afterByGroup.TryGetValue(key, out var newSessions);\n\n            oldSessions ??= new List<ClassSession>();\n            newSessions ??= new List<ClassSession>();\n\n            if (oldSessions.Count == 0)\n            {\n                continue;\n            }\n\n            var oldSigs = oldSessions.Select(SessionSig).Distinct().OrderBy(s => s).ToList();\n            var newSigs = newSessions.Select(SessionSig).Distinct().OrderBy(s => s).ToList();\n\n            if (oldSigs.SequenceEqual(newSigs))\n            {\n                continue; // unchanged\n            }\n\n            var lecturerUserId =\n                newSessions.Select(s => s.LecturerUserId).FirstOrDefault(id => id.HasValue)",
+    "notes": {
+      "116": "A brand-new group is an addition, not a change",
+      "124": "Same day, time and venue: nothing to report"
+    }
+  },
+  "be-clash-records": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Services/TimetablePersonalService.cs",
+    "from": 1511,
+    "language": "csharp",
+    "code": "    // ============================================================\n    // CLASS TIMETABLE CLASHES  (admin check before publishing)\n    // ============================================================\n    //\n    // A clash is a student who would see two different modules in\n    // overlapping times on the same day. Works on any managed class\n    // timetable (normally a Pending one) and resolves each student's\n    // sessions the same way their own timetable does: enrolled modules,\n    // their allocated group, and the same semester filter. A module the\n    // student has no group for yet counts only when it has a single\n    // group (the one they'd be given); otherwise it is reported under\n    // UnallocatedStudents instead of guessed. Back-to-back sessions\n    // (one ends as the next starts) don't clash.\n    // ============================================================\n\n    public sealed record ClashSession(\n        string ModuleCode,\n        string ModuleName,\n        string Group,\n        string Venue,\n        string Time);\n\n    public sealed record ClassClash(\n        string Day,\n        string Time,\n        List<ClashSession> Sessions,\n        bool SameSemester,\n        int StudentCount,\n        List<string> Students);\n\n    public sealed record ClassClashReport(\n        int StudentsChecked,\n        int StudentsWithClashes,\n        int UnallocatedStudents,\n        List<ClassClash> Clashes);",
+    "notes": {
+      "1526": "Records: small immutable types for the report"
+    }
+  },
+  "be-clash-blocks": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Services/TimetablePersonalService.cs",
+    "from": 1764,
+    "language": "csharp",
+    "code": "                foreach (var session in ordered)\n                {\n                    if (blocks.Count == 0 || session.Start >= blockEnd)\n                    {\n                        blocks.Add(new() { session });\n                        blockEnd = session.End;\n                    }\n                    else\n                    {\n                        blocks[^1].Add(session);\n\n                        if (session.End > blockEnd)\n                        {\n                            blockEnd = session.End;\n                        }\n                    }\n                }\n\n                foreach (var block in blocks)\n                {\n                    // The same module twice (e.g. a session in two venues)\n                    // is not a clash - it takes two different modules.\n                    if (block.Select(s => CodeOf(s.ModuleId))\n                            .Distinct(StringComparer.OrdinalIgnoreCase)\n                            .Count() < 2)\n                    {\n                        continue;\n                    }\n\n                    hasClash = true;\n\n                    var blockModuleIds = block\n                        .Select(s => s.ModuleId)\n                        .Distinct()\n                        .ToList();\n\n                    var sameSemester = blockModuleIds\n                        .SelectMany((moduleId, index) =>\n                            blockModuleIds.Skip(index + 1)\n                                .Select(otherModuleId => (moduleId, otherModuleId)))\n                        .Any(pair =>\n                            enrolledSemestersByModule[pair.moduleId]\n                                .Overlaps(enrolledSemestersByModule[pair.otherModuleId]));",
+    "notes": {
+      "1766": "Sessions sorted by start time are joined into overlapping blocks",
+      "1786": "One module in two venues is not a clash: it needs two different modules",
+      "1800": "Same-semester clashes are the serious ones"
+    }
+  },
+  "be-student-tt": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/GetTimetableController.cs",
+    "from": 341,
+    "language": "csharp",
+    "code": "    [HttpGet(\"student/timetable/class\")]\n    [Authorize(Roles = \"Student\")]\n    public async Task<IActionResult> GetStudentClassTimetable()\n    {\n        try\n        {\n            var userId = GetCurrentUserId();\n\n            if (!userId.HasValue)\n            {\n                return Unauthorized(new\n                {\n                    message = \"Invalid user identity.\"\n                });\n            }\n\n            var classes =\n                await _timetableService\n                    .GetStudentClassAsync(userId.Value);\n\n            return Ok(new\n            {\n                message =\n                    \"Student class timetable retrieved successfully.\",\n\n                timetable = classes\n            });\n        }\n        catch (Exception ex)\n        {\n            return StatusCode(500, new\n            {\n                message =\n                    \"An error occurred while retrieving the student class timetable.\",\n\n                error = ex.Message\n            });\n        }\n    }",
+    "notes": {
+      "342": "Students only; the id comes from their own token, never the URL"
+    }
+  },
+  "be-student-download": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/GetTimetableController.cs",
+    "from": 429,
+    "language": "csharp",
+    "code": "    [HttpGet(\"student/timetable/class/download\")]\n    [Authorize(Roles = \"Student\")]\n    public async Task<IActionResult> DownloadStudentClassTimetable(\n        [FromQuery] string format = \"excel\")\n    {\n        try\n        {\n            var userId = GetCurrentUserId();\n\n            if (!userId.HasValue)\n            {\n                return Unauthorized(new\n                {\n                    message = \"Invalid user identity.\"\n                });\n            }\n\n            var classes =\n                await _timetableService\n                    .GetStudentClassAsync(userId.Value);\n\n            var info =\n                await _timetableService\n                    .GetStudentTimetableInfoAsync(userId.Value);\n\n            if (info == null)\n            {\n                return NotFound(new\n                {\n                    message =\n                        \"Student information could not be found.\"\n                });\n            }\n\n            var baseFileName =\n                CreateStudentFileName(info);\n\n            var selectedFormat =\n                format?.Trim().ToLowerInvariant()\n                ?? \"excel\";\n\n            return selectedFormat switch\n            {\n                // ------------------------------------------------\n                // WORD\n                // ------------------------------------------------\n\n                \"word\" or \"docx\" =>\n                    File(\n                        await _timetableService\n                            .BuildStudentClassTemplate(\n                                userId.Value,\n                                classes,\n                                TimetableTemplateFormat.Word),\n\n                        \"application/vnd.openxmlformats-officedocument.wordprocessingml.document\",\n\n                        $\"{baseFileName}_Class_Timetable.docx\"),\n\n                // ------------------------------------------------\n                // PDF\n                // ------------------------------------------------\n\n                \"pdf\" =>\n                    File(\n                        await _timetableService\n                            .BuildStudentClassTemplate(\n                                userId.Value,\n                                classes,\n                                TimetableTemplateFormat.Pdf),\n\n                        \"application/pdf\",\n\n                        $\"{baseFileName}_Class_Timetable.pdf\"),\n\n                // ------------------------------------------------\n                // EXCEL\n                // ------------------------------------------------\n\n                _ =>\n                    File(\n                        await _timetableService\n                            .BuildStudentClassTemplate(\n                                userId.Value,\n                                classes,\n                                TimetableTemplateFormat.Excel),\n\n                        \"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\",\n\n                        $\"{baseFileName}_Class_Timetable.xlsx\")\n            };",
+    "notes": {
+      "470": "One endpoint, three formats: ?format=pdf | word | excel",
+      "477": "File(...) sends the bytes with a content type and a file name"
+    }
+  },
+  "be-group-search": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Services/GroupTimetableService.cs",
+    "from": 179,
+    "language": "csharp",
+    "code": "    public async Task<GroupTimetableSearchResultDto> SearchAsync(\n        GroupTimetableFilter filter)\n    {\n        var (sources, timetables) = await FindAsync(filter);\n\n        return new GroupTimetableSearchResultDto\n        {\n            Sources = sources,\n            Filter = filter,\n            TotalMatches = timetables.Count,\n            Truncated = timetables.Count > MaxSearchResults,\n            Periods = TimetableSlotTemplate.GetPeriods(),\n            Timetables = timetables.Take(MaxSearchResults).ToList()\n        };\n    }\n\n    public async Task<GroupTimetableFile?> DownloadAsync(\n        GroupTimetableFilter filter,\n        string? format)\n    {\n        var kind = ParseFormat(format);\n        var (sources, timetables) = await FindAsync(filter);\n\n        if (timetables.Count == 0)\n        {\n            return null;\n        }\n\n        if (timetables.Count > MaxDownloadTimetables)\n        {\n            throw new ArgumentException(\n                $\"{timetables.Count} group timetables match. Narrow the filters \" +\n                $\"(course, year or group) to download at most {MaxDownloadTimetables} at once.\");\n        }\n\n        var content = GroupTimetableTemplateExporter.Render(\n            timetables,\n            TimetableSlotTemplate.GetPeriods(),\n            kind);\n\n        var fileName = FileNameFor(timetables, filter);\n\n        return kind == TimetableTemplateFormat.Pdf\n            ? new GroupTimetableFile(content, \"application/pdf\", $\"{fileName}.pdf\")\n            : new GroupTimetableFile(\n                content,\n                \"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\",",
+    "notes": {
+      "189": "Searches are capped, so a wide filter cannot return thousands of timetables",
+      "207": "Bulk downloads are capped too"
+    }
+  },
+  "be-export-types": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Timetable/TimetableTemplateExporter.cs",
+    "from": 41,
+    "language": "csharp",
+    "code": "public enum TimetableTemplateKind\n{\n    Student,\n    Lecturer\n}\n\npublic enum TimetableTemplateFormat\n{\n    Pdf,\n    Word,\n    Excel\n}\n\npublic sealed record TemplateClass(\n    string Day,\n    TimeOnly Start,\n    TimeOnly End,\n    string Title,\n    IReadOnlyList<string> Details);\n\npublic sealed record TemplateTimetable(\n    TimetableTemplateKind Kind,\n    string Heading,\n    string? Caption,\n    IReadOnlyList<TemplateClass> Classes);\n\npublic static class TimetableTemplateExporter\n{\n    private static readonly string[] Days =\n        { \"Monday\", \"Tuesday\", \"Wednesday\", \"Thursday\", \"Friday\" };\n\n    // ---------------- Student template palette ----------------\n    private const string StudentBackground = \"#F0F0F0\";\n    private const string StudentFloor = \"#DDD9C6\";\n    private const string StudentCorner = \"#D69197\";\n    private const string StudentText = \"#231F20\";\n\n    private static readonly string[] StudentDayColors =\n        { \"#547A5A\", \"#C7A953\", \"#BA4852\", \"#82A0BE\", \"#D69197\" };\n\n    // Time tiles cycle red, gold, green, pink, blue (top to bottom).\n    private static readonly string[] StudentTimeColors =\n        { \"#BA4852\", \"#C7A953\", \"#547A5A\", \"#D69197\", \"#82A0BE\" };\n\n    // ---------------- Lecturer template palette ----------------\n    private const string LecturerNavy = \"#213C70\";\n    private const string LecturerBackground = \"#D1D7DB\";\n    private const string LecturerBorder = \"#A6A6A6\";\n\n    // Fonts embedded in the PDF (the template faces); Word/Excel use\n    // close matches that ship with Office so the files open correctly.\n    private const string StudentPdfFont = \"Lora\";\n    private const string LecturerPdfFont = \"Montserrat\";\n    private const string StudentOfficeFont = \"Georgia\";\n    private const string LecturerOfficeFont = \"Century Gothic\";\n\n    private const int DefaultFirstHour = 8;\n    private const int DefaultLastHour = 17;\n\n    private static readonly object FontLock = new();\n    private static bool _fontsRegistered;\n\n    public static byte[] Render(\n        TemplateTimetable timetable,\n        TimetableTemplateFormat format)\n    {\n        var grid = BuildGrid(timetable.Classes);\n\n        return format switch\n        {\n            TimetableTemplateFormat.Word => RenderWord(timetable, grid),\n            TimetableTemplateFormat.Excel => RenderExcel(timetable, grid),\n            _ => RenderPdf(timetable, grid)\n        };\n    }",
+    "notes": {
+      "73": "The template colours, copied from the faculty’s own design",
+      "92": "Fonts embedded in the PDF; Office files use close system fonts",
+      "109": "One timetable model, three renderers"
+    }
+  },
+  "be-export-pdf": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Timetable/TimetableTemplateExporter.cs",
+    "from": 262,
+    "language": "csharp",
+    "code": "\n        var page = PageSizes.A4.Landscape();\n        var scale = page.Width / TemplateWidthPx;\n        var student = IsStudent(timetable);\n\n        return Document.Create(container =>\n        {\n            container.Page(p =>\n            {\n                p.Size(page);\n                p.Margin(0);\n                p.DefaultTextStyle(x => x\n                    .FontFamily(student ? StudentPdfFont : LecturerPdfFont)\n                    .FontColor(student ? StudentText : LecturerNavy));\n\n                p.Content().Layers(layers =>\n                {\n                    layers.PrimaryLayer()\n                        .Image(Asset(student ? \"student-template.png\" : \"lecturer-template.png\"))\n                        .FitArea();\n\n                    if (student)\n                    {\n                        DrawStudentPdf(layers, timetable, grid, scale);\n                    }\n                    else\n                    {\n                        DrawLecturerPdf(layers, timetable, grid, scale);\n                    }\n                });\n            });\n        }).GeneratePdf();\n    }",
+    "notes": {
+      "267": "QuestPDF: the page is described in C#",
+      "280": "The template image is the bottom layer…",
+      "285": "…and the classes are drawn on top at exact positions"
+    }
+  },
+  "be-planner-upload": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/UploadPlannerController.cs",
+    "from": 30,
+    "language": "csharp",
+    "code": "    [HttpPost(\"upload/planner\")]\n    [RequestSizeLimit(20 * 1024 * 1024)]\n    public async Task<IActionResult> UploadPlanner(\n        IFormFile file)\n    {\n        if (file == null || file.Length == 0)\n        {\n            return BadRequest(new\n            {\n                message = \"The uploaded file is empty.\"\n            });\n        }\n\n        // Calendar events are read with ClosedXML, which can't open .xls.\n        if (!string.Equals(\n                Path.GetExtension(file.FileName),\n                \".xlsx\",\n                StringComparison.OrdinalIgnoreCase))\n        {\n            return BadRequest(new\n            {\n                message = \"Only Excel files (.xlsx) are allowed.\"\n            });\n        }\n\n        try\n        {\n            // ----------------------------------------------------\n            // GET LOGGED-IN ADMIN USER ID\n            // ----------------------------------------------------\n\n            var userIdClaim =\n                User.FindFirst(\n                    ClaimTypes.NameIdentifier)?.Value\n                ?? User.FindFirst(\"sub\")?.Value;\n\n            if (!int.TryParse(\n                    userIdClaim,\n                    out var userId))\n            {\n                return Unauthorized(new\n                {\n                    message =\n                        \"Invalid user identity.\"\n                });\n            }\n\n            // ----------------------------------------------------\n            // UPLOAD\n            // ----------------------------------------------------\n\n            var previousPlanner =\n                await _plannerService.GetLatestPlannerAsync();\n\n            var planner =\n                await _plannerService\n                    .UploadPlannerAsync(\n                        file,\n                        userId);\n\n            // ----------------------------------------------------\n            // IMPORT CALENDAR EVENTS FROM THE UPLOADED EXCEL FILE\n            // ----------------------------------------------------\n\n            int importedCount;\n\n            try\n            {\n                importedCount =\n                    await _calendarImportService\n                        .ImportAcademicCalendarAsync(\n                            planner.planner_id,\n                            planner.file_path);\n            }\n            catch\n            {\n                // The import failed and kept the previous events, so\n                // the previous planner must stay the current one too.\n                await _plannerService.DiscardFailedUploadAsync(\n                    planner.planner_id,\n                    previousPlanner?.planner_id);\n\n                throw;\n            }\n",
+    "notes": {
+      "31": "Up to 20 MB",
+      "43": "ClosedXML reads .xlsx only",
+      "98": "Every worksheet is scanned for dated events",
+      "108": "If the import fails, the previous calendar stays the current one"
+    }
+  },
+  "be-calendar-import": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Services/AcademicCalendarExcelImportService.cs",
+    "from": 26,
+    "language": "csharp",
+    "code": "    public async Task<int> ImportAcademicCalendarAsync(\n        int plannerId,\n        string filePath)\n    {\n        if (!File.Exists(filePath))\n            filePath = ResolvePlannerFilePath(filePath);\n\n        var planner = await _context.AcademicPlanners\n            .FirstOrDefaultAsync(x =>\n                x.planner_id == plannerId);\n\n        if (planner == null)\n            throw new InvalidOperationException(\n                \"Academic planner record was not found.\");\n\n        var importedEvents =\n            new List<AcademicCalendarEvent>();\n\n        // Opened here, not by path: ClosedXML keeps its own handle open when\n        // a corrupt file fails to load, which blocks removing a rejected file.\n        using var fileStream = File.OpenRead(filePath);\n\n        XLWorkbook openedWorkbook;\n\n        try\n        {\n            openedWorkbook = new XLWorkbook(fileStream);\n        }\n        catch (Exception)\n        {\n            // Renamed, corrupt or password-protected files.\n            throw new InvalidOperationException(\n                \"This file could not be read as an Excel workbook. \" +\n                \"Check that it is a valid, unprotected .xlsx file. \" +\n                \"The previous calendar events have been kept.\");\n        }\n\n        using var workbook = openedWorkbook;\n\n        // The event reader finds dates in almost any sheet, so a timetable\n        // or staff list would otherwise replace the live calendar.\n        if (!LooksLikeAcademicCalendar(workbook))\n            throw new InvalidOperationException(NotACalendarMessage);\n\n        // =====================================================\n        // READ EVERY WORKSHEET\n        // =====================================================\n\n        foreach (var worksheet in workbook.Worksheets)\n        {\n            // -------------------------------------------------\n            // First read formal Excel tables.\n            // -------------------------------------------------\n\n            foreach (var table in worksheet.Tables)\n            {\n                await ReadExcelTableAsync(\n                    table,\n                    worksheet.Name,\n                    table.Name,\n                    plannerId,\n                    importedEvents);\n            }\n\n            // -------------------------------------------------",
+    "notes": {
+      "46": "Opened as a stream so a broken file can still be deleted",
+      "67": "Refuses workbooks that are not an academic calendar",
+      "80": "Formal Excel tables first, then the rest of each sheet"
+    }
+  },
+  "be-calendar-get": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/AcademicCalendarController.cs",
+    "from": 28,
+    "language": "csharp",
+    "code": "    // Every event imported from the current planner (past and future), so\n    // the Core Calendar can show the whole academic year. Open to every\n    // role that views the Core Calendar.\n    [Authorize(Roles = \"Student,Lecturer,SystemAdmin\")]\n    [HttpGet(\"calendar\")]\n    public async Task<IActionResult> GetAcademicCalendar()\n    {\n        try\n        {\n            var planner =\n                await _plannerService.GetLatestPlannerAsync();\n\n            if (planner == null)\n            {\n                return NotFound(new\n                {\n                    message =\n                        \"No academic calendar information is currently available.\"\n                });\n            }\n\n            var events =\n                await _notificationService\n                    .GetCurrentCalendarEventsAsync();\n\n            return Ok(new\n            {\n                message =\n                    \"Academic calendar retrieved successfully.\",\n\n                plannerId =\n                    planner.planner_id,\n\n                fileName =\n                    planner.file_name,\n\n                uploadedAt =\n                    planner.uploaded_at,\n\n                count = events.Count,\n\n                events\n            });\n        }\n        catch (Exception ex)\n        {\n            return StatusCode(\n                StatusCodes.Status500InternalServerError,\n                new\n                {\n                    message =\n                        \"Unable to retrieve the academic calendar.\",\n\n                    error = ex.Message\n                });\n        }\n    }",
+    "notes": {
+      "31": "Every role can read the calendar"
+    }
+  },
+  "be-booking-api": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/LabBookingsController.cs",
+    "from": 126,
+    "language": "csharp",
+    "code": "    [HttpPost(\"book-lab-class\")]\n    public Task<IActionResult> BookLabClass([FromBody] BookLabClassRequest request) =>\n        Run(async () =>\n        {\n            var booking = await _bookingService.BookLabClassAsync(request, GetUserId(), GetUserRole());\n\n            return Created($\"/api/lab-bookings/booking-details/{booking.BookingPublicId}\", new\n            {\n                message = booking.IsPendingApproval\n                    ? $\"Your request for {booking.Title} has been sent to a System Admin for approval. You will be notified of the decision.\"\n                    : $\"{booking.Title} has been booked successfully.\",\n                isPendingApproval = booking.IsPendingApproval,\n                bookingDetails = booking\n            });\n        });",
+    "notes": {
+      "132": "201 Created, with the new booking’s URL"
+    }
+  },
+  "be-book-validate": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Services/LabBookingService.cs",
+    "from": 307,
+    "language": "csharp",
+    "code": "    public async Task<LabBookingDetailsDto> BookLabClassAsync(BookLabClassRequest request, int userId, string role)\n    {\n        if (request == null)\n            throw new ArgumentException(\"A booking request body is required.\");\n\n        var bookingRole = await RequireBookingRoleAsync(userId, role);\n\n        if (request.LabId <= 0)\n            throw new ArgumentException(\"lab_id is required: pick the lab or class to book.\");\n\n        // \"Has internet\" is a lecturer-only option.\n        var isLecturer = bookingRole == LabBookingRole.Lecturer;\n        if (!isLecturer && request.HasInternet.HasValue)\n        {\n            throw new UnauthorizedAccessException(\n                \"has_internet can only be set by lecturers. Leave it out of the request.\");\n        }\n\n        // Open lab sessions are for lecturers, tutors and mentors; a student\n        // booking through lab access books for themselves.\n        if (bookingRole == LabBookingRole.Student && request.IsOpenLab)\n        {\n            throw new UnauthorizedAccessException(\n                \"Only lecturers, tutors and mentors can open a session to every student.\");\n        }\n\n        var purpose = (request.Purpose ?? string.Empty).Trim();\n        if (purpose.Length == 0)\n            throw new ArgumentException(\"purpose is required, e.g. \\\"DPMC20 practical, group C\\\".\");\n        if (purpose.Length > PurposeMaxLength)\n            throw new ArgumentException($\"purpose must not exceed {PurposeMaxLength} characters.\");\n\n        if (request.ModuleId.HasValue &&\n            !await _accessService.ModuleExistsAsync(request.ModuleId.Value))\n        {\n            throw new ArgumentException(\"The selected module does not exist in ARMS.\");\n        }\n\n        var lab = await LoadActiveLabAsync(request.LabId);\n\n        var (startUtc, endUtc) = await ValidateSelectionAsync(\n            lab, userId, request.BookingDate, request.StartTime, request.EndTime, excludeBookingId: null);",
+    "notes": {
+      "312": "Lecturer, tutor or mentor? (403 otherwise)",
+      "317": "“Has internet” is a lecturer-only option",
+      "347": "Free periods, back-to-back, daily limits, no overlaps…"
+    }
+  },
+  "be-book-save": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Services/LabBookingService.cs",
+    "from": 350,
+    "language": "csharp",
+    "code": "        // Booking rules: bookings held at once (requests + confirmed, not finished).\n        var limits = await LimitsForAsync(userId);\n        if (limits.Active is int maxActive)\n        {\n            var nowUtc = DateTime.UtcNow;\n            var held = await _context.LabBookings.AsNoTracking()\n                .CountAsync(b => b.booked_by_user_id == userId &&\n                                 LabBookingStatus.Active.Contains(b.status) &&\n                                 b.end_at > nowUtc);\n            if (held >= maxActive)\n            {\n                throw new InvalidOperationException(\n                    $\"You can have at most {Plural(maxActive, \"booking\")} at a time (requests and confirmed bookings), and you have {held}. \" +\n                    \"Cancel one, or book again once one has finished.\");\n            }\n        }\n\n        // Working hours (08:00-16:59) wait for a System Admin; after hours\n        // (17:00-07:59) are confirmed by the system straight away.\n        var needsApproval = NeedsApproval(startUtc, endUtc);\n\n        var booking = new LabBooking\n        {\n            public_id = Guid.NewGuid(),\n            lab_id = lab.lab_id,\n            booked_by_user_id = userId,\n            module_id = request.ModuleId,\n            purpose = purpose,\n            start_at = startUtc,\n            end_at = endUtc,\n            status = needsApproval ? LabBookingStatus.Pending : LabBookingStatus.Approved,\n            created_at = DateTime.UtcNow,\n            reviewed_at = needsApproval ? null : DateTime.UtcNow,\n            booking_type = request.IsOpenLab ? LabBookingType.OpenLab : LabBookingType.Other,\n            // Tutors/mentors keep the column default (true).\n            has_internet = !isLecturer || (request.HasInternet ?? true)\n        };\n\n        _context.LabBookings.Add(booking);\n        await SaveBookingChangesAsync();\n\n        var details = (await BuildDetailsListAsync(new List<LabBooking> { booking }, bookingRole))[0];\n\n        if (needsApproval)\n            await _notifier.NotifyRequestReceivedAsync(details);\n        else\n            await _notifier.NotifyConfirmedAsync(details);\n\n        await _activity.LogAsync(userId, VenueActivityCategory.Bookings,\n            needsApproval\n                ? (details.IsOpenLab ? \"Requested an open lab\" : \"Requested a booking\")\n                : (details.IsOpenLab ? \"Booked an open lab\" : \"Made a booking\"),\n            $\"{details.Title} · {details.BookingReference}\", details.LabId,\n            new[]\n            {\n                $\"{details.Date}, {details.StartTime}–{details.EndTime}.\",\n                $\"Purpose: {details.Purpose}\",\n                needsApproval ? \"Waiting for a System Admin to approve it.\" : \"Confirmed automatically (after-hours booking).\"\n            });\n\n        return details;\n    }",
+    "notes": {
+      "351": "The admin’s booking rules for this booker type",
+      "369": "Working hours wait for an admin; after hours are confirmed at once",
+      "393": "The booker is told either way",
+      "398": "Every booking is written to the Venue Activity log"
+    }
+  },
+  "be-needs-approval": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Services/LabBookingService.cs",
+    "from": 1206,
+    "language": "csharp",
+    "code": "    private const int ReviewFromMinute = 8 * 60;   // 08:00 - working hours start\n    private const int ReviewUntilMinute = 17 * 60; // 17:00 - after hours start (16:59 is the last working minute)\n\n    /// <summary>True when a booking for [start, end) (UTC) needs a System Admin's approval: it overlaps 08:00-16:59 SAST.</summary>\n    private static bool NeedsApproval(DateTime startUtc, DateTime endUtc)\n    {\n        var start = ToLocal(startUtc);\n        var end = ToLocal(endUtc);\n\n        for (var day = start.Date; day <= end.Date; day = day.AddDays(1))\n        {\n            var workStart = day.AddMinutes(ReviewFromMinute);\n            var workEnd = day.AddMinutes(ReviewUntilMinute);\n            if (start < workEnd && end > workStart)\n                return true;\n        }\n\n        return false;\n    }",
+    "notes": {
+      "1210": "Any overlap with 08:00–16:59 South African time needs approval"
+    }
+  },
+  "be-can-book": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Services/LabBookingAccessService.cs",
+    "from": 47,
+    "language": "csharp",
+    "code": "    public async Task<bool> CanBookAsync(int userId, string role)\n        => await GetBookingRoleAsync(userId, role) != null;\n\n    public async Task<bool> ModuleExistsAsync(int moduleId)\n    {\n        if (moduleId <= 0)\n            return false;\n\n        return await _context.Modules\n            .AsNoTracking()\n            .AnyAsync(m => m.module_id == moduleId);\n    }\n\n    public async Task<IReadOnlyList<LabAccessGrant>?> GetStudentGrantsAsync(int userId)\n    {\n        if (userId <= 0)\n            return null;\n\n        var student = await LoadStudentAsync(userId);\n\n        // Lecturers (not in identity_db.student), tutors and mentors are not\n        // limited to granted venues.\n        if (student == null || student.IsTutor || student.IsMentor)\n            return null;\n\n        return await GrantsForStudentAsync(student.StudentId, userId);\n    }",
+    "notes": {
+      "69": "Tutors and mentors are not limited to granted venues"
+    }
+  },
+  "be-booking-entity": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Domain/Entities/LabBooking.cs",
+    "from": 1,
+    "language": "csharp",
+    "code": "namespace ARMS.Domain.Entities;\n\n/// <summary>\n/// lab_booking_db.lab_bookings — one booking of a lab or class venue.\n///\n/// Columns (see the live schema):\n///   booking_id (identity), public_id, lab_id (FK -> labs), booked_by_user_id\n///   (FK -> identity_db.user), module_id (nullable FK -> academic_db.module),\n///   purpose, start_at, end_at (timestamptz, stored in UTC), status, created_at,\n///   booking_type.\n///\n/// DB rules worth knowing:\n///   - status       IN (PENDING, APPROVED, REJECTED, CANCELLED)  - see LabBookingStatus\n///   - booking_type IN (OPEN LAB, STUDYTHON, OTHER)              - see LabBookingType\n///   - end_at > start_at\n///   - ex_lab_bookings_no_overlap: no two APPROVED bookings of the\n///     same lab may overlap (Postgres exclusion constraint).\n/// </summary>\npublic class LabBooking\n{\n    public long booking_id { get; set; }\n\n    public Guid public_id { get; set; }\n\n    public long lab_id { get; set; }\n\n    // identity_db.user.user_id of the lecturer / tutor / mentor who booked.\n    public int booked_by_user_id { get; set; }\n\n    // Optional: not every booking is for a specific module.\n    public int? module_id { get; set; }\n\n    public string purpose { get; set; } = string.Empty;\n\n    // Stored as UTC (timestamptz).\n    public DateTime start_at { get; set; }\n\n    public DateTime end_at { get; set; }\n\n    public string status { get; set; } = LabBookingStatus.Approved;\n\n    public DateTime created_at { get; set; }\n\n    public string booking_type { get; set; } = LabBookingType.Other;\n\n    /// <summary>\n    /// The lecturer-only \"Has internet\" checkbox. Tutor and mentor bookings\n    /// always keep the database default (true).\n    /// </summary>\n    public bool has_internet { get; set; } = true;\n\n    // ---- Approval (docs/booking_approval_2026-11-19.sql) ----\n\n    /// <summary>The System Admin who approved / rejected it. NULL = decided by the system (15:01-07:59) or not yet.</summary>\n    public int? reviewed_by_user_id { get; set; }\n\n    public DateTime? reviewed_at { get; set; }\n\n    /// <summary>Why it was rejected, or why another venue was given. Shown to the booker.</summary>\n    public string? review_note { get; set; }\n\n    /// <summary>The venue the booker asked for, when the System Admin gave another one instead.</summary>\n    public long? original_lab_id { get; set; }\n}",
+    "notes": {
+      "16": "PostgreSQL itself refuses two overlapping approved bookings of one lab"
+    }
+  },
+  "be-approve": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Services/LabBookingService.cs",
+    "from": 2821,
+    "language": "csharp",
+    "code": "    public async Task<ApproveBookingResultDto> ApproveBookingAsync(Guid bookingPublicId, int adminUserId, string? note)\n    {\n        var booking = await LoadPendingRequestAsync(bookingPublicId);\n        var lab = await _context.Labs.AsNoTracking().FirstOrDefaultAsync(l => l.lab_id == booking.lab_id)\n            ?? throw new KeyNotFoundException(\"That venue no longer exists.\");\n\n        if (!lab.is_active)\n            throw new InvalidOperationException($\"{TitleOf(lab)} is no longer in use, so the booking can't be approved. Reject it or give another venue.\");\n\n        var day = await LoadDayDataAsync(DateOnly.FromDateTime(ToLocal(booking.start_at)), excludeBookingId: null);\n        var conflict = VenueConflict(lab, day, booking);\n        if (conflict != null)\n            throw new InvalidOperationException($\"{conflict} Reject the request or give another venue.\");\n\n        var message = Trim(note);\n        var nowUtc = DateTime.UtcNow;\n\n        booking.status = LabBookingStatus.Approved;\n        booking.reviewed_by_user_id = adminUserId;\n        booking.reviewed_at = nowUtc;\n        booking.review_note = message;\n\n        // Everyone else who asked for the same venue at an overlapping time.\n        var others = await _context.LabBookings\n            .Where(b => b.booking_id != booking.booking_id &&\n                        b.lab_id == booking.lab_id &&\n                        b.status == LabBookingStatus.Pending &&\n                        b.start_at < booking.end_at && b.end_at > booking.start_at)\n            .OrderBy(b => b.created_at)\n            .ToListAsync();\n\n        foreach (var other in others)\n        {\n            other.status = LabBookingStatus.Rejected;\n            other.reviewed_by_user_id = adminUserId;\n            other.reviewed_at = nowUtc;\n            other.review_note = OverlapRejectedReason;\n        }\n\n        await SaveBookingChangesAsync();",
+    "notes": {
+      "2831": "Re-checks that the venue is still free right now",
+      "2844": "Everyone else who wanted an overlapping time…",
+      "2854": "…is rejected in the same save"
+    }
+  },
+  "be-approve-notify": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Services/LabBookingService.cs",
+    "from": 2862,
+    "language": "csharp",
+    "code": "        var row = (await BuildAdminBookingsAsync(new List<LabBooking> { booking }))[0];\n\n        var emailed = await _notifier.NotifyConfirmedAsync(row.Booking, approvedByAdmin: true);\n\n        var rejectedRows = others.Count == 0\n            ? new List<AdminBookingDto>()\n            : await BuildAdminBookingsAsync(others);\n\n        foreach (var rejected in rejectedRows)\n        {\n            await _notifier.NotifyRejectedAsync(rejected.Booking, OverlapRejectedReason);\n\n            await _activity.LogAsync(adminUserId, VenueActivityCategory.Bookings, \"Rejected a booking\",\n                $\"{rejected.Booking.Title} · {rejected.Booking.BookedByName}\", rejected.Booking.LabId,\n                new[]\n                {\n                    $\"{rejected.Booking.BookingReference}, {rejected.Booking.Date}, {rejected.Booking.StartTime}–{rejected.Booking.EndTime}.\",\n                    $\"Reason: {OverlapRejectedReason} ({row.Booking.BookingReference})\"\n                });\n        }\n\n        var rejectedNames = rejectedRows.Select(r => r.Booking.BookedByName).ToList();\n\n        await _activity.LogAsync(adminUserId, VenueActivityCategory.Bookings, \"Approved a booking\",\n            $\"{row.Booking.Title} · {row.Booking.BookedByName}\", row.Booking.LabId,\n            Lines($\"{row.Booking.BookingReference}, {row.Booking.Date}, {row.Booking.StartTime}–{row.Booking.EndTime}.\",\n                  message == null ? null : $\"Note: {message}\",\n                  rejectedNames.Count == 0 ? null : $\"Also rejected: {string.Join(\", \", rejectedNames)}.\"));\n\n        return new ApproveBookingResultDto\n        {\n            Booking = row,\n            Rejected = rejectedNames,\n            Emailed = emailed ?? new BookingEmailRecipientsDto()\n        };\n    }",
+    "notes": {
+      "2864": "The booker, the building’s technicians and campus CPS are emailed"
+    }
+  },
+  "be-venues-api": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/AdminVenuesController.cs",
+    "from": 44,
+    "language": "csharp",
+    "code": "    /// <summary>Every venue (labs and classes), in use first.</summary>\n    [HttpGet(\"venues\")]\n    [ProducesResponseType(typeof(List<AdminVenueDto>), StatusCodes.Status200OK)]\n    public Task<IActionResult> GetVenues() => Run(_ => _venues.GetVenuesAsync());\n\n    [HttpGet(\"venues/{labId:long}\")]\n    [ProducesResponseType(typeof(AdminVenueDto), StatusCodes.Status200OK)]\n    [ProducesResponseType(StatusCodes.Status404NotFound)]\n    public Task<IActionResult> GetVenue(long labId) => Run(_ => _venues.GetVenueAsync(labId));\n\n    /// <summary>\n    /// Adds a venue. Body: { name, type: \"Lab\"|\"Class\", campus, building, floor,\n    /// seats (empty = not counted), equipment, tags: [clevertouch, projector,\n    /// whiteboard], accessibility, access: \"open\"|\"restricted\", opens, closes }.\n    /// </summary>\n    [HttpPost(\"venues\")]\n    [ProducesResponseType(typeof(AdminVenueDto), StatusCodes.Status201Created)]\n    [ProducesResponseType(StatusCodes.Status400BadRequest)]\n    [ProducesResponseType(StatusCodes.Status409Conflict)]\n    public async Task<IActionResult> AddVenue([FromBody] SaveVenueRequest request)\n    {\n        if (!TryGetUserId(out var adminId))\n            return Unauthorized(new { message = \"Invalid user identity.\" });\n\n        try\n        {\n            var venue = await _venues.AddVenueAsync(request, adminId);\n            return CreatedAtAction(nameof(GetVenue), new { labId = venue.Id }, venue);\n        }\n        catch (Exception ex) when (Map(ex) is { } result)\n        {\n            return result;\n        }\n    }\n\n    /// <summary>Saves changes to a venue (same body as adding one).</summary>\n    [HttpPut(\"venues/{labId:long}\")]\n    [ProducesResponseType(typeof(AdminVenueDto), StatusCodes.Status200OK)]\n    public Task<IActionResult> UpdateVenue(long labId, [FromBody] SaveVenueRequest request) =>\n        Run(adminId => _venues.UpdateVenueAsync(labId, request, adminId));\n\n    /// <summary>\n    /// Takes a venue out of use (active = false: hidden from booking, its\n    /// upcoming bookings cancelled and the bookers told) or back into use.\n    /// </summary>\n    [HttpPut(\"venues/{labId:long}/active\")]\n    [ProducesResponseType(typeof(SetVenueActiveResultDto), StatusCodes.Status200OK)]\n    public Task<IActionResult> SetActive(long labId, [FromBody] SetVenueActiveRequest request) =>\n        Run(adminId => _venues.SetActiveAsync(labId, request, adminId));\n\n    /// <summary>One venue's Monday-Friday: timetabled classes/tests and every booking. date = any day of the week (default today).</summary>\n    [HttpGet(\"venues/{labId:long}/week\")]\n    [ProducesResponseType(typeof(AdminVenueWeekDto), StatusCodes.Status200OK)]\n    public Task<IActionResult> GetVenueWeek(long labId, [FromQuery] DateOnly? date) =>\n        Run(_ => _venues.GetVenueWeekAsync(labId, date ?? DateOnly.FromDateTime(DateTime.UtcNow.AddHours(2))));",
+    "notes": {
+      "73": "An exception filter maps known errors to status codes",
+      "89": "Taking a venue out of use cancels its upcoming bookings and tells the bookers"
+    }
+  },
+  "be-access-admin-api": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/AdminLabAccessRequestsController.cs",
+    "from": 50,
+    "language": "csharp",
+    "code": "    /// <summary>The venues the system would offer instead of the requested ones.</summary>\n    [HttpGet(\"{requestId:long}/other-venues\")]\n    [ProducesResponseType(typeof(List<LabAccessVenueDto>), StatusCodes.Status200OK)]\n    public Task<IActionResult> GetOtherVenues(long requestId, CancellationToken cancellationToken) =>\n        Run(_ => _service.GetOtherVenuesAsync(requestId, cancellationToken));\n\n    /// <summary>Approves a pending request. message is optional.</summary>\n    [HttpPost(\"{requestId:long}/approve\")]\n    [ProducesResponseType(typeof(LabAccessRequestResponse), StatusCodes.Status200OK)]\n    [ProducesResponseType(StatusCodes.Status409Conflict)]\n    public Task<IActionResult> Approve(long requestId, [FromBody] LabAccessMessageDto? body, CancellationToken cancellationToken) =>\n        Run(adminId => _service.ApproveAsync(requestId, adminId, body?.Message, cancellationToken));\n\n    /// <summary>Rejects a pending request. message (the reason) is required.</summary>\n    [HttpPost(\"{requestId:long}/reject\")]\n    [ProducesResponseType(typeof(LabAccessRequestResponse), StatusCodes.Status200OK)]\n    [ProducesResponseType(StatusCodes.Status400BadRequest)]\n    public Task<IActionResult> Reject(long requestId, [FromBody] LabAccessMessageDto body, CancellationToken cancellationToken) =>\n        Run(adminId => _service.RejectAsync(requestId, adminId, body?.Message, cancellationToken));\n\n    /// <summary>\n    /// Offers other venues for a pending request. message is required; leave\n    /// lab_ids empty to let the system pick them.\n    /// </summary>\n    [HttpPost(\"{requestId:long}/offer\")]\n    [ProducesResponseType(typeof(LabAccessRequestResponse), StatusCodes.Status200OK)]\n    public Task<IActionResult> Offer(long requestId, [FromBody] OfferLabAccessVenuesDto body, CancellationToken cancellationToken) =>\n        Run(adminId => _service.OfferVenuesAsync(requestId, adminId, body ?? new OfferLabAccessVenuesDto(), cancellationToken));\n\n    // =========================================================\n\n    private async Task<IActionResult> Run<T>(Func<int, Task<T>> action)\n    {\n        var value = User.FindFirst(ClaimTypes.NameIdentifier)?.Value\n            ?? User.FindFirst(\"sub\")?.Value\n            ?? User.FindFirst(\"user_id\")?.Value;\n\n        if (!int.TryParse(value, out var adminId) || adminId <= 0)\n            return Unauthorized(new { message = \"Invalid user identity.\" });\n\n        try\n        {\n            return Ok(await action(adminId));\n        }\n        catch (Exception ex) when (LabAccessRequestsController.Map(ex) is { } result)\n        {\n            return result;\n        }\n    }",
+    "notes": {
+      "81": "Shared helper: read the admin id, run, map errors"
+    }
+  },
+  "be-access-approve": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Services/LabAccessRequestService.cs",
+    "from": 463,
+    "language": "csharp",
+    "code": "    public async Task<LabAccessRequestResponse> ApproveAsync(\n        long requestId, int adminUserId, string? message, CancellationToken cancellationToken)\n    {\n        var (entity, admin) = await LoadPendingForAdminAsync(requestId, adminUserId, cancellationToken);\n        var note = string.IsNullOrWhiteSpace(message) ? null : message.Trim();\n\n        await EnsureReadModelUserAsync(admin, cancellationToken);\n        AddResponse(entity, admin, \"APPROVED\", note);\n        Touch(entity, LabAccessStatus.Approved, admin.user_id);\n        await _context.SaveChangesAsync(cancellationToken);\n\n        var view = (await BuildViewsAsync(new List<long> { requestId }, cancellationToken)).Single();\n\n        await LogActivityAsync(adminUserId, \"Approved a lab access request\", view);\n\n        await NotifyAsync(\n            view.LecturerUserId,\n            lecturerTitle: $\"Lab access request approved – {view.ModuleCode}\",\n            lecturerMessage:\n                $\"Your request has been approved. {Who(view, capital: true)} in {view.ModuleCode} \" +\n                $\"now have access to {VenueList(view.Labs)} ({DateRange(view)}).\" +\n                (note != null ? $\" Message from the admin: {note}\" : string.Empty),\n            adminTitle: $\"Lab access request approved – {view.ModuleCode}\",\n            adminMessage:\n                $\"{FullName(admin)} approved {view.LecturerName}'s request for {view.ModuleCode} \" +\n                $\"to use {VenueList(view.Labs)} ({DateRange(view)}).\",\n            cancellationToken);\n\n        return view;\n    }\n\n    public async Task<LabAccessRequestResponse> RejectAsync(\n        long requestId, int adminUserId, string? message, CancellationToken cancellationToken)\n    {\n        var reason = (message ?? string.Empty).Trim();\n\n        if (reason.Length == 0)\n            throw new ArgumentException(\"Tell the lecturer why the request is rejected.\");\n\n        var (entity, admin) = await LoadPendingForAdminAsync(requestId, adminUserId, cancellationToken);\n\n        await EnsureReadModelUserAsync(admin, cancellationToken);\n        AddResponse(entity, admin, \"REJECTED\", reason);\n        Touch(entity, LabAccessStatus.Rejected, admin.user_id);\n        entity.rejection_reason = reason;\n        await _context.SaveChangesAsync(cancellationToken);\n\n        var view = (await BuildViewsAsync(new List<long> { requestId }, cancellationToken)).Single();\n\n        await LogActivityAsync(adminUserId, \"Rejected a lab access request\", view);\n\n        await NotifyAsync(\n            view.LecturerUserId,\n            lecturerTitle: $\"Lab access request not approved – {view.ModuleCode}\",\n            lecturerMessage: $\"Your request for {view.ModuleCode} to use {VenueList(view.Labs)} was not approved. Reason: {reason}\",\n            adminTitle: $\"Lab access request rejected – {view.ModuleCode}\",\n            adminMessage: $\"{FullName(admin)} rejected {view.LecturerName}'s request for {view.ModuleCode}. Reason: {reason}\",\n            cancellationToken);\n\n        return view;\n    }",
+    "notes": {
+      "470": "Each decision is stored as a response row: the request keeps its history",
+      "478": "The lecturer and the other admins are notified",
+      "500": "Rejecting needs a reason"
+    }
+  },
+  "be-special-create": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Services/SpecialBookingService.cs",
+    "from": 130,
+    "language": "csharp",
+    "code": "    public async Task<SpecialBookingSavedDto> CreateAsync(SaveSpecialBookingRequest request, int adminUserId)\n    {\n        var plan = await ValidateAsync(request, isNew: true);\n\n        var clashes = await ClashesAsync(plan.Draft, plan.LabIds, exceptId: null);\n        if (clashes.Count > 0)\n            throw new InvalidOperationException(string.Join(\" \", clashes));\n\n        var row = plan.Draft;\n        row.public_id = Guid.NewGuid();\n        row.status = SpecialBookingStatus.Active;\n        row.created_by_user_id = adminUserId;\n        row.created_at = DateTime.UtcNow;\n        row.Labs = plan.LabIds.Select(id => new SpecialBookingLab { lab_id = id }).ToList();\n        row.Members = await MembersAsync(plan.Emails);\n\n        _context.SpecialBookings.Add(row);\n        await _context.SaveChangesAsync();\n\n        var cancelled = await CancelAffectedAsync(row, plan.LabIds, adminUserId);\n        var dto = await GetAsync(row.public_id);\n\n        await NotifyMembersAsync(dto, plan.Emails);\n\n        await _activity.LogAsync(adminUserId, VenueActivityCategory.Access, plan.Emails.Count > 0 ? \"Uploaded a list\" : \"Added a special booking\",\n            $\"{dto.Reference} · {string.Join(\", \", dto.Venues.Select(v => v.Title))}\",\n            plan.LabIds.Count == 1 ? plan.LabIds[0] : null,\n            Describe(dto, cancelled));\n\n        return Saved(dto, cancelled, \"saved\");\n    }",
+    "notes": {
+      "134": "Refuses to overlap another special booking",
+      "149": "Venue bookings it overlaps are cancelled and their bookers told",
+      "152": "Everyone on the list is told about their access"
+    }
+  },
+  "be-activity-log": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Services/VenueActivityLogger.cs",
+    "from": 9,
+    "language": "csharp",
+    "code": "/// <summary>\n/// Writes the System Admin's Venue Activity log (lab_booking_db.venue_activity):\n/// venues added / edited / taken out of use, bookings made / moved /\n/// cancelled, and lab access requests and decisions.\n///\n/// Logging never breaks the action being logged: the row is written with\n/// its own INSERT (so it does not flush anything else the caller is still\n/// tracking), and any failure - e.g. the table not created yet - is only\n/// written to the server log.\n/// </summary>\npublic sealed class VenueActivityLogger\n{\n    private readonly ArmsDbContext _context;\n    private readonly ILogger<VenueActivityLogger> _logger;\n\n    public VenueActivityLogger(ArmsDbContext context, ILogger<VenueActivityLogger> logger)\n    {\n        _context = context;\n        _logger = logger;\n    }\n\n    /// <param name=\"actorUserId\">Who did it; null for the system.</param>\n    /// <param name=\"category\">One of <see cref=\"VenueActivityCategory\"/>.</param>\n    /// <param name=\"action\">e.g. \"Added a venue\".</param>\n    /// <param name=\"target\">e.g. \"Lab 10-125\".</param>\n    /// <param name=\"labId\">The venue it concerns, if any (for the venue filter).</param>\n    /// <param name=\"details\">Extra lines shown under the entry.</param>\n    public async Task LogAsync(\n        int? actorUserId,\n        string category,\n        string action,\n        string target,\n        long? labId = null,\n        IEnumerable<string>? details = null)\n    {\n        try\n        {\n            var (name, role, number) = await DescribeActorAsync(actorUserId);\n            var lines = (details ?? Enumerable.Empty<string>())\n                .Where(d => !string.IsNullOrWhiteSpace(d))\n                .Select(d => d.Trim())\n                .ToArray();\n\n            await _context.Database.ExecuteSqlInterpolatedAsync($\"\"\"\n                INSERT INTO lab_booking_db.venue_activity\n                    (occurred_at, actor_user_id, actor_name, actor_role, actor_number,\n                     category, action, target, lab_id, details)\n                VALUES\n                    ({DateTime.UtcNow}, {actorUserId}, {Cut(name, 150)}, {Cut(role, 50)}, {Cut(number, 30)},\n                     {category}, {Cut(action, 100)}, {Cut(target, 300)}, {labId}, {lines})\n                \"\"\");\n        }\n        catch (Exception ex)\n        {\n            _logger.LogWarning(ex, \"Could not write venue activity '{Action}' for {Target}.\", action, target);\n        }\n    }",
+    "notes": {
+      "52": "Raw SQL insert: does not save anything else the caller is still tracking",
+      "61": "A failed log line never breaks the action being logged"
+    }
+  },
+  "be-notify-create": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Services/NotificationService.cs",
+    "from": 39,
+    "language": "csharp",
+    "code": "    public async Task<int> CreateAsync(\n        string type,\n        string title,\n        string message,\n        IEnumerable<int> recipientUserIds,\n        int? classTimetableId = null,\n        int? testTimetableId = null,\n        int? supportId = null,\n        int? contactMessageId = null,\n        CancellationToken cancellationToken = default)\n    {\n        var recipients = (recipientUserIds ?? Enumerable.Empty<int>())\n            .Where(id => id > 0)\n            .Distinct()\n            .ToList();\n\n        if (recipients.Count == 0)\n        {\n            return 0;\n        }\n\n        var notification = new Notification\n        {\n            notification_type = NotificationType.Normalize(type),\n            title = Trim(title, 150),\n            message = string.IsNullOrWhiteSpace(message) ? title : message,\n            class_timetable_id = classTimetableId,\n            test_timetable_id = testTimetableId,\n            support_id = supportId,\n            contact_us_message_id = contactMessageId,\n            created_at = DateTime.UtcNow,\n            recipients = recipients\n                .Select(uid => new UserNotification\n                {\n                    user_id = uid,\n                    is_read = false\n                })\n                .ToList()\n        };\n\n        _context.Notifications.Add(notification);\n        await _context.SaveChangesAsync(cancellationToken);\n\n        return recipients.Count;\n    }\n\n    /// <summary>Delivers a notification to every user that holds <paramref name=\"roleName\"/>.</summary>\n    public async Task<int> NotifyRoleAsync(\n        string type,\n        string title,\n        string message,\n        string roleName,\n        int? classTimetableId = null,\n        int? testTimetableId = null,\n        int? supportId = null,\n        int? contactMessageId = null,\n        CancellationToken cancellationToken = default)\n    {\n        var userIds = await UsersInRoleAsync(roleName, cancellationToken);\n\n        return await CreateAsync(\n            type, title, message, userIds,\n            classTimetableId, testTimetableId, supportId, contactMessageId,\n            cancellationToken);\n    }",
+    "notes": {
+      "60": "One notification row…",
+      "71": "…and one read/unread row per recipient",
+      "97": "Everyone in a role: SystemAdmin, Lecturer or Student"
+    }
+  },
+  "be-notify-api": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/StudentNotificationsController.cs",
+    "from": 39,
+    "language": "csharp",
+    "code": "    [HttpGet]\n    public async Task<IActionResult> GetMyNotifications(\n        [FromQuery] string? type = null,\n        [FromQuery] bool unreadOnly = false,\n        [FromQuery] int page = 1,\n        [FromQuery] int pageSize = 20)\n    {\n        if (!TryGetUserId(out var userId))\n        {\n            return Unauthorized(new\n            {\n                message = \"Invalid user identity.\"\n            });\n        }\n\n        if (!string.IsNullOrWhiteSpace(type) &&\n            !NotificationType.IsValid(type))\n        {\n            return BadRequest(new\n            {\n                message =\n                    \"type must be one of: Academic, Administrative, Calendar, Support, Admin.\"\n            });\n        }\n\n        var result = await _notifications.GetForUserAsync(\n            userId,\n            type,\n            unreadOnly,\n            page,\n            pageSize);\n\n        return Ok(new\n        {\n            message = \"Student notifications retrieved successfully.\",\n            result\n        });\n    }",
+    "notes": {
+      "46": "The student’s own id from the token"
+    }
+  },
+  "be-notify-broadcast": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/StudentNotificationsController.cs",
+    "from": 188,
+    "language": "csharp",
+    "code": "    [HttpPost(\"broadcast\")]\n    [Authorize(Roles = \"SystemAdmin\")]\n    public async Task<IActionResult> BroadcastToStudents(\n        [FromBody] BroadcastNotificationDto body)\n    {\n        if (body is null ||\n            string.IsNullOrWhiteSpace(body.Title) ||\n            string.IsNullOrWhiteSpace(body.Message))\n        {\n            return BadRequest(new\n            {\n                message = \"title and message are required.\"\n            });\n        }\n\n        var type = NotificationType.Normalize(body.Type);\n\n        var delivered = body.UserIds is { Count: > 0 }\n            ? await _notifications.CreateAsync(\n                type,\n                body.Title,\n                body.Message,\n                body.UserIds)\n            : await _notifications.NotifyRoleAsync(\n                type,\n                body.Title,\n                body.Message,\n                UserRole.Student);\n\n        return Ok(new\n        {\n            message =\n                $\"Notification delivered to {delivered} student(s).\",\n\n            delivered\n        });\n    }",
+    "notes": {
+      "189": "Admins only, though it sits in the student controller"
+    }
+  },
+  "be-support-submit": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Services/SupportTicketService.cs",
+    "from": 43,
+    "language": "csharp",
+    "code": "    public async Task<SupportTicketDto> SubmitAsync(\n        int submitterUserId,\n        SubmitSupportTicketDto request)\n    {\n        var category = ContactMessageCategory.Normalize(request?.Category);\n\n        if (category == null)\n        {\n            throw new ArgumentException(\n                $\"category must be one of: {string.Join(\", \", ContactMessageCategory.All)}.\");\n        }\n\n        if (string.IsNullOrWhiteSpace(request!.Subject))\n        {\n            throw new ArgumentException(\"subject is required.\");\n        }\n\n        if (string.IsNullOrWhiteSpace(request.Message))\n        {\n            throw new ArgumentException(\"message is required.\");\n        }\n\n        var submitter = await _context.Users\n            .AsNoTracking()\n            .FirstOrDefaultAsync(u => u.user_id == submitterUserId);\n\n        if (submitter == null)\n        {\n            throw new InvalidOperationException(\"Submitter account could not be found.\");\n        }\n\n        var entity = new SupportTicket\n        {\n            user_id = submitterUserId,\n            category = category,\n            subject = Limit(request.Subject, 200),\n            message = request.Message.Trim(),\n            admin_feedback = null,\n            is_resolved = false,\n            created_at = DateTime.UtcNow\n        };\n\n        _context.SupportTickets.Add(entity);\n        await _context.SaveChangesAsync();\n\n        // Never let an alerting problem fail the submission - the ticket is\n        // already saved at this point.\n        try\n        {\n            await AlertSystemAdminsAsync(entity, submitter);\n        }\n        catch (Exception ex)\n        {\n            _logger.LogError(\n                ex,\n                \"Failed to alert SystemAdmins about support ticket {Id}.\",\n                entity.support_id);\n        }\n\n        return ToDto(entity, submitter);\n    }",
+    "notes": {
+      "47": "Only the known categories are accepted",
+      "86": "Saved first…",
+      "92": "…then the admins are alerted; a failed alert does not lose the ticket"
+    }
+  },
+  "be-support-respond": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Services/SupportTicketService.cs",
+    "from": 147,
+    "language": "csharp",
+    "code": "    public async Task<SupportTicketDto?> RespondAsync(\n        int ticketId,\n        RespondToSupportTicketDto request)\n    {\n        var ticket = await _context.SupportTickets\n            .FirstOrDefaultAsync(t => t.support_id == ticketId);\n\n        if (ticket == null)\n        {\n            return null;\n        }\n\n        if (!string.IsNullOrWhiteSpace(request.AdminFeedback))\n        {\n            ticket.admin_feedback = request.AdminFeedback.Trim();\n        }\n\n        ticket.is_resolved = request.Resolve;\n\n        await _context.SaveChangesAsync();\n\n        var submitter = await _context.Users\n            .AsNoTracking()\n            .FirstOrDefaultAsync(u => u.user_id == ticket.user_id);\n\n        // As with submission, an alerting failure must not undo the response\n        // that was already saved.\n        try\n        {\n            if (submitter != null)\n            {\n                await AlertSubmitterAsync(ticket, submitter);\n            }\n        }\n        catch (Exception ex)\n        {\n            _logger.LogError(\n                ex,\n                \"Failed to alert the submitter about support ticket {Id}.\",\n                ticket.support_id);\n        }\n\n        return ToDto(ticket, submitter);\n    }",
+    "notes": {
+      "164": "Resolve, or reopen with Resolve = false",
+      "178": "The sender gets an in-app notification and an email"
+    }
+  },
+  "be-feedback": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/StudentFeedbackController.cs",
+    "from": 16,
+    "language": "csharp",
+    "code": "[ApiController]\n[Route(\"api/student/feedback\")]\n[Authorize(Roles = \"Student\")]\npublic class StudentFeedbackController : ControllerBase\n{\n    private readonly SupportTicketService _tickets;\n\n    public StudentFeedbackController(\n        SupportTicketService tickets)\n    {\n        _tickets = tickets;\n    }\n\n\n    // =========================================================\n    // GET /api/student/feedback\n    // =========================================================\n    // Returns the student's support queries together with any\n    // Admin feedback/responses.\n    // =========================================================\n\n    [HttpGet(\"feedback\")]\n    public async Task<IActionResult> GetMyFeedback()\n    {\n        if (!TryGetUserId(out var userId))\n        {\n            return Unauthorized(new\n            {\n                message = \"Invalid user identity.\" \n            });\n        }\n\n        try\n        {\n            var tickets = await _tickets.GetMineAsync(userId);\n\n            return Ok(new\n            {\n                message =\n                    \"Student feedback retrieved successfully.\",\n\n                count = tickets.Count,\n\n                feedback = tickets\n            });\n        }\n        catch (Exception ex)\n        {\n            return StatusCode(500, new\n            {\n                message =\n                    \"An error occurred while retrieving your feedback.\",\n\n                error = ex.Message\n            });\n        }\n    }",
+    "notes": {
+      "40": "Only ever the signed-in student’s own tickets"
+    }
+  },
   "ad-dash-page": {
     "repo": "ARMS.Frontend",
     "file": "src/pages/system-admin/SystemAdminDashboard.jsx",

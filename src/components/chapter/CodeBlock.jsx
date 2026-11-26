@@ -1,6 +1,7 @@
 import { Fragment } from 'react'
 import { Highlight, themes } from 'prism-react-renderer'
 import snippets from '../../data/snippets.json'
+import '../../lib/prismCsharp'
 import './code.css'
 
 /** Wraps a handbook note in the comment syntax of the snippet's language. */

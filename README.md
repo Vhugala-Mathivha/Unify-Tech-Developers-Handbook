@@ -22,7 +22,7 @@ Turn pages by clicking/dragging a page corner, with the arrow buttons, or with t
 scripts/
   crop-author-photos.mjs     originals -> grayscale portraits + puzzle crops (crop boxes live here)
   extract-snippets.mjs       copies the code excerpts from the ARMS repos -> src/data/snippets.json
-  snippets/                  which ARMS files/lines each chapter shows (frontend, frontend-admin, frontend-roles)
+  snippets/                  which ARMS files/lines each chapter shows (uiux, frontend*, backend); never include appsettings files
 src/
   assets/screens/            ARMS screenshots shown on chapter pages
   assets/authors/
@@ -43,6 +43,7 @@ src/
     useBookSize.js           fits the book to the viewport (two-page spread vs single page)
     useArrowKeys.js          ← → keyboard navigation
   lib/flipSound.js           synthesised page-turn sound
+  lib/prismCsharp.js         C# syntax highlighting for backend code
   components/
     book/                    Book (flip engine + open/closed shell), BookPage, BookControls
     covers/                  FrontCover, BackCover
