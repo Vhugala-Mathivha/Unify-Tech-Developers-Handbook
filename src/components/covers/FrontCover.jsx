@@ -10,7 +10,7 @@ export default function FrontCover() {
   return (
     <div className="front-cover">
       <header className="front-cover__top">
-        <h1 className="front-cover__title front-cover__frost" aria-label={`${bookTitle.main} - ${bookTitle.sub}`}>
+        <h1 className="front-cover__title" aria-label={`${bookTitle.main} - ${bookTitle.sub}`}>
           <span className="front-cover__title-main">{bookTitle.main}</span>
           <span className="front-cover__title-sub">{bookTitle.sub}</span>
         </h1>
@@ -23,7 +23,7 @@ export default function FrontCover() {
             {row.map((author) => (
               <figure className="front-cover__author" key={author.id}>
                 <AuthorPhoto author={author} />
-                <AuthorCaption author={author} as="figcaption" className="front-cover__frost" />
+                <AuthorCaption author={author} as="figcaption" />
               </figure>
             ))}
           </div>
