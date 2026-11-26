@@ -3,9 +3,11 @@
 // Page 1 is a right-hand page (it faces the inside front cover), so odd
 // pages sit on the right and even pages on the left, like a real book.
 //
-// To add a chapter page later: push it here and set the matching TOC entry's
-// `pageId` in src/data/contents.js — page numbers update automatically.
+// Chapters come from src/data/chapters/. Each is a two-page spread; set the
+// matching TOC entry's `pageId` to the chapter id in src/data/contents.js.
+// Page numbers update automatically.
 import { tocCategories } from '../data/contents'
+import { chapters } from '../data/chapters'
 
 /**
  * How many "rows" fit on one contents page. An entry is 1 row, a group
@@ -67,6 +69,13 @@ function buildPages() {
         continued: i > 0,
       }),
     )
+  }
+
+  // Chapter spreads: text on a left (even) page, screen + code facing it.
+  for (const chapter of chapters) {
+    if (pages.length % 2 === 0) pages.push({ key: `before-${chapter.id}`, type: 'blank' })
+    pages.push({ key: chapter.id, type: 'chapter', chapter })
+    pages.push({ key: `${chapter.id}-code`, type: 'chapter-code', chapter })
   }
 
   // the leaf count must be even, so pad with a blank page if needed

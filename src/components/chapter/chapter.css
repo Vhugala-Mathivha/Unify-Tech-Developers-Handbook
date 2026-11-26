@@ -1,0 +1,167 @@
+/* Chapter spreads. Sizes in cqw so everything scales with the page. */
+
+.chapter {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 10cqw 9cqw 12cqw;
+  color: var(--ink);
+}
+
+/* ---------- Left page: text ---------- */
+
+.chapter__overline {
+  margin: 0 0 1.2cqw;
+  font-family: var(--font-title);
+  font-weight: 500;
+  font-size: 2cqw;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--burgundy);
+}
+
+.chapter__title {
+  margin: 0 0 3cqw;
+  font-family: var(--font-title);
+  font-weight: 700;
+  font-size: 6cqw;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.chapter__text {
+  margin: 0 0 2cqw;
+  font-family: var(--font-body);
+  font-size: 2.6cqw;
+  line-height: 1.6;
+}
+
+.chapter__points {
+  margin-top: auto;
+  padding-top: 2.4cqw;
+  border-top: 0.25cqw solid #e6e2da;
+}
+
+.chapter__points-title,
+.chapter__label {
+  margin: 0 0 1.2cqw;
+  font-family: var(--font-title);
+  font-weight: 500;
+  font-size: 2cqw;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gray);
+}
+
+.chapter__points ul {
+  margin: 0;
+  padding-left: 3cqw;
+  font-family: var(--font-body);
+  font-size: 2.4cqw;
+  line-height: 1.55;
+}
+
+.chapter__points li + li {
+  margin-top: 0.8cqw;
+}
+
+.chapter__points li::marker {
+  color: var(--burgundy);
+}
+
+/* ---------- Right page: screen + code ---------- */
+
+.chapter__label--code {
+  margin-top: 3cqw;
+}
+
+/* takes the rest of the page; scrolls if the code is longer */
+.chapter__code {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+
+.screen {
+  margin: 0;
+}
+
+.screen__button {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0.25cqw solid #d9d5cd;
+  border-radius: 1.4cqw;
+  overflow: hidden;
+  background: #fff;
+  cursor: zoom-out;
+  box-shadow: 0 0.6cqw 2cqw rgba(0, 0, 0, 0.12);
+}
+
+/* the flip engine must see the button as the click target */
+.screen__button > *,
+.screen__show > * {
+  pointer-events: none;
+}
+
+.screen__img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.screen__hint {
+  position: absolute;
+  right: 1.6cqw;
+  bottom: 1.6cqw;
+  padding: 0.6cqw 1.6cqw;
+  border-radius: 99px;
+  background: rgba(17, 17, 17, 0.72);
+  font-family: var(--font-title);
+  font-size: 1.8cqw;
+  color: #fff;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.screen__button:hover .screen__hint,
+.screen__button:focus-visible .screen__hint {
+  opacity: 1;
+}
+
+.screen__caption {
+  margin-top: 1.2cqw;
+  font-family: var(--font-body);
+  font-style: italic;
+  font-size: 2.2cqw;
+  line-height: 1.45;
+  color: var(--gray);
+}
+
+.screen__show {
+  align-self: flex-start;
+  padding: 1.2cqw 2.6cqw;
+  border: 0.25cqw solid var(--burgundy);
+  border-radius: 99px;
+  background: transparent;
+  font-family: var(--font-title);
+  font-weight: 500;
+  font-size: 2.2cqw;
+  color: var(--burgundy);
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.screen__show:hover,
+.screen__show:focus-visible {
+  background: var(--burgundy);
+  color: #fff;
+}
+
+.screen__button:focus-visible,
+.screen__show:focus-visible {
+  outline: 0.4cqw solid var(--burgundy);
+  outline-offset: 0.4cqw;
+}

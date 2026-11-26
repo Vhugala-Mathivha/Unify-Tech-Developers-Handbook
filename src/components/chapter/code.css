@@ -1,0 +1,72 @@
+/* VS Code Dark+ look for code excerpts. Sizes in cqw so they scale with the page. */
+
+.code {
+  margin: 0;
+  border-radius: 1.4cqw;
+  overflow: hidden;
+  background: #1e1e1e;
+  box-shadow: 0 0.6cqw 2cqw rgba(0, 0, 0, 0.18);
+}
+
+.code + .code {
+  margin-top: 2.4cqw;
+}
+
+/* the editor tab: repo, file path, line range */
+.code__tab {
+  display: flex;
+  align-items: baseline;
+  gap: 1.4cqw;
+  padding: 1.3cqw 2.2cqw;
+  background: #252526;
+  border-bottom: 0.25cqw solid #007acc;
+  font-family: 'Cascadia Code', Consolas, 'Courier New', monospace;
+  font-size: 1.9cqw;
+  color: #cccccc;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.code__repo {
+  color: #858585;
+}
+
+.code__file {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #e7e7e7;
+}
+
+.code__lines {
+  margin-left: auto;
+  color: #858585;
+}
+
+.code__body {
+  margin: 0;
+  padding: 1.4cqw 0;
+  font-family: 'Cascadia Code', Consolas, 'Courier New', monospace;
+  font-size: 1.95cqw;
+  line-height: 1.55;
+  color: #d4d4d4;
+}
+
+/* long lines wrap under their own text, not under the line number */
+.code__line {
+  display: grid;
+  grid-template-columns: 6.4cqw 1fr;
+}
+
+.code__number {
+  padding-right: 2cqw;
+  text-align: right;
+  color: #858585;
+  user-select: none;
+}
+
+.code__text {
+  padding-right: 2cqw;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

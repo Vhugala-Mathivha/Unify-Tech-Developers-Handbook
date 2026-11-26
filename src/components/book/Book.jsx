@@ -11,6 +11,8 @@ import BackCover from '../covers/BackCover'
 import DedicationPage from '../pages/DedicationPage'
 import ContentsPage from '../pages/ContentsPage'
 import TocPage from '../pages/TocPage'
+import ChapterTextPage from '../chapter/ChapterTextPage'
+import ChapterCodePage from '../chapter/ChapterCodePage'
 import BookPage from './BookPage'
 import BookControls from './BookControls'
 import spreadLabel from './spreadLabel'
@@ -26,11 +28,15 @@ function renderPage(page) {
       return <ContentsPage />
     case 'toc':
       return <TocPage category={page.category} groups={page.groups} continued={page.continued} />
+    case 'chapter':
+      return <ChapterTextPage chapter={page.chapter} />
+    case 'chapter-code':
+      return <ChapterCodePage chapter={page.chapter} />
     default:
       return null
   }
 }
-const NUMBERED = new Set(['contents', 'toc'])
+const NUMBERED = new Set(['contents', 'toc', 'chapter', 'chapter-code'])
 
 // Built once: leaves never change, only the engine's position in them.
 const leaves = [

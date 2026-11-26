@@ -1,0 +1,261 @@
+/* Chapter illustrations. ARMS samples use ARMS's own fonts (Trebuchet MS / Arial). */
+
+.viz {
+  margin: 1cqw 0 3cqw;
+}
+
+/* :where keeps this reset weaker than each visual's own padding */
+:where(.viz) ul,
+:where(.viz) ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.viz code {
+  font-family: 'Cascadia Code', Consolas, 'Courier New', monospace;
+  font-size: 1.8cqw;
+  color: var(--gray);
+}
+
+/* ---------- principles ---------- */
+
+.viz-principles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.8cqw;
+}
+
+.viz-principles li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5cqw;
+  padding: 2cqw;
+  border: 0.25cqw solid #e6e2da;
+  border-radius: 1.4cqw;
+  background: #fff;
+  font-family: var(--font-body);
+  font-size: 2.15cqw;
+  line-height: 1.45;
+  color: var(--gray);
+}
+
+.viz-principles strong {
+  font-family: var(--font-title);
+  font-size: 2.7cqw;
+  color: var(--ink);
+}
+
+.viz-principles__num {
+  font-family: var(--font-title);
+  font-weight: 700;
+  font-size: 2cqw;
+  color: var(--burgundy);
+}
+
+/* ---------- palette ---------- */
+
+.viz-palette {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1.8cqw 1.4cqw;
+}
+
+.viz-palette li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8cqw;
+}
+
+.viz-palette__chip {
+  aspect-ratio: 1.25;
+  border-radius: 1.2cqw;
+  box-shadow: inset 0 0 0 0.25cqw rgba(0, 0, 0, 0.08);
+}
+
+.viz-palette__name {
+  font-family: 'Cascadia Code', Consolas, monospace;
+  font-size: 1.7cqw;
+  color: var(--gray);
+}
+
+/* ---------- type scale ---------- */
+
+.viz-type {
+  border: 0.25cqw solid #e6e2da;
+  border-radius: 1.4cqw;
+  background: #fff;
+  padding: 1cqw 2.4cqw;
+}
+
+.viz-type li {
+  display: flex;
+  flex-direction: column;
+  padding: 1.1cqw 0;
+}
+
+.viz-type li + li {
+  border-top: 0.2cqw dashed #ece8e0;
+}
+
+.viz-type__meta {
+  font-family: 'Cascadia Code', Consolas, monospace;
+  font-size: 1.6cqw;
+  color: var(--gray-soft);
+}
+
+.viz-type__meta em {
+  font-style: normal;
+  color: var(--burgundy);
+}
+
+.viz-type__sample {
+  line-height: 1.3;
+  color: oklch(19% 0.014 255);
+}
+
+.viz-type__sample--serif {
+  font-family: 'Trebuchet MS', Trebuchet, 'Segoe UI', Verdana, sans-serif;
+}
+
+.viz-type__sample--sans,
+.viz-type__sample--muted {
+  font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif;
+}
+
+.viz-type__sample--muted {
+  color: oklch(48% 0.014 255);
+}
+
+/* ---------- icons: a slice of the admin sidebar ---------- */
+
+.viz-icons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6cqw 1.4cqw;
+  padding: 2cqw;
+  border-radius: 1.4cqw;
+  background: oklch(32% 0.09 255);
+}
+
+.viz-icons li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 1.4cqw;
+  padding: 0.8cqw 1cqw;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 2cqw;
+  color: oklch(97% 0.006 250);
+}
+
+.viz-icons__icon {
+  grid-row: span 2;
+  width: 3.4cqw;
+  height: 3.4cqw;
+}
+
+.viz .viz-icons code {
+  font-size: 1.5cqw;
+  color: oklch(82.3% 0.167 81.5);
+}
+
+/* ---------- spacing & radii ---------- */
+
+.viz-spacing {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 3cqw;
+  align-items: center;
+}
+
+.viz-spacing__scale li {
+  display: grid;
+  grid-template-columns: 11cqw auto 1fr;
+  align-items: center;
+  gap: 1.4cqw;
+  padding: 0.45cqw 0;
+}
+
+.viz-spacing__bar {
+  height: 1.8cqw;
+  border-radius: 0.4cqw;
+  background: oklch(44.3% 0.126 250);
+}
+
+.viz-spacing__px {
+  font-family: var(--font-title);
+  font-size: 1.8cqw;
+  color: var(--gray);
+}
+
+.viz-spacing__radii {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.6cqw;
+}
+
+.viz-spacing__radii li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6cqw;
+}
+
+.viz-spacing__box {
+  width: 8cqw;
+  height: 8cqw;
+  border: 0.3cqw solid oklch(44.3% 0.126 250);
+  background: oklch(95% 0.02 250);
+}
+
+/* ---------- light vs dark ---------- */
+
+.viz-themes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.8cqw;
+}
+
+.viz-themes__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.4cqw;
+  padding: 2cqw;
+  border-radius: 1.4cqw;
+  box-shadow: inset 0 0 0 0.25cqw rgba(0, 0, 0, 0.08);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.viz-themes__name {
+  font-family: 'Cascadia Code', Consolas, monospace;
+  font-size: 1.7cqw;
+  opacity: 0.75;
+}
+
+.viz-themes__card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6cqw;
+  padding: 1.8cqw;
+  border: 0.25cqw solid;
+  border-radius: 1.2cqw;
+}
+
+.viz-themes__title {
+  font-family: 'Trebuchet MS', Trebuchet, sans-serif;
+  font-size: 2.4cqw;
+}
+
+.viz-themes__muted {
+  font-size: 1.9cqw;
+}
+
+.viz-themes__btn {
+  align-self: flex-start;
+  margin-top: 0.6cqw;
+  padding: 0.7cqw 1.8cqw;
+  border-radius: 0.9cqw;
+  font-size: 1.8cqw;
+  color: #fff;
+}

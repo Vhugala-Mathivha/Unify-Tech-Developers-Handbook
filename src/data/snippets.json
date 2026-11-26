@@ -1,0 +1,72 @@
+{
+  "custom-focus": {
+    "repo": "ARMS.Frontend",
+    "file": "src/styles/custom.css",
+    "from": 25,
+    "language": "css",
+    "code": "/* Focus visibility for keyboard users across ARMS forms */\n:focus-visible {\n  outline: 2px solid var(--ring);\n  outline-offset: 2px;\n}"
+  },
+  "custom-reduced-motion": {
+    "repo": "ARMS.Frontend",
+    "file": "src/styles/custom.css",
+    "from": 44,
+    "language": "css",
+    "code": "/*\n * Respect the OS \"reduce motion\" setting: when a user has asked for less\n * animation, collapse every transition/animation to an instant change\n * (including the library's slide/fade-in utilities) and stop smooth scrolling.\n */\n@media (prefers-reduced-motion: reduce) {\n  *,\n  *::before,\n  *::after {\n    animation-duration: 0.01ms !important;\n    animation-iteration-count: 1 !important;\n    transition-duration: 0.01ms !important;\n    scroll-behavior: auto !important;\n  }\n}"
+  },
+  "index-arms-colours": {
+    "repo": "ARMS.Frontend",
+    "file": "src/index.css",
+    "from": 120,
+    "language": "css",
+    "code": "/*\n * ARMS-derived colours. Mixed from the library's tokens, so they follow the\n * light/dark toggle on their own — reach for these instead of hex values\n * when a page needs a shade the library doesn't name.\n *   --heading-accent  navy heading text (a lighter blue in dark mode)\n *   --primary-hover   pressed/hovered primary buttons\n *   --brand-overlay   navy wash over photos behind white text\n *   --status-*        timetable status colours (badge dots, the dashboard's\n *                     status bar). Red is kept out of these on purpose: red\n *                     means \"has clashes\" (--status-clash), and an inactive\n *                     timetable isn't an error.\n */\n:root {\n  --heading-accent: color-mix(in oklab, var(--primary) 60%, var(--foreground));\n  --primary-hover: color-mix(in oklab, var(--primary) 85%, black);\n  --brand-overlay: color-mix(in oklab, var(--sidebar) 75%, transparent);\n  --status-published: var(--success);\n  --status-pending: var(--warning);\n  --status-inactive: color-mix(in oklab, var(--muted-foreground) 55%, transparent);\n  --status-clash: var(--destructive);\n}"
+  },
+  "typography-scale": {
+    "repo": "ARMS.Frontend",
+    "file": "src/styles/typography.css",
+    "from": 51,
+    "language": "css",
+    "code": ":root {\n  /* Type scale — one place to tune every heading/subheading/body size. */\n  --text-page-title: 1.5rem; /* page-level h1, e.g. \"Settings\" */\n  --text-section-title: 1.25rem; /* h2 section headings within a page */\n  --text-card-title: 1.125rem; /* card/collapsible-card titles */\n  --text-card-subtitle: 0.875rem; /* card/collapsible-card descriptions */\n  --text-body: 0.875rem; /* default body/paragraph text */\n  --text-label: 0.75rem; /* field labels, eyebrow text, meta text */\n}\n\n.page-title {\n  font-family: var(--font-serif, \"Trebuchet MS\", Trebuchet, \"Segoe UI\", Verdana, sans-serif);\n  font-size: var(--text-page-title);\n  font-weight: 700;\n  line-height: 1.25;\n  color: var(--foreground);\n  /* Padding between the page heading and the content below it. */\n  margin-bottom: var(--space-6);\n}"
+  },
+  "admin-nav-icons": {
+    "repo": "ARMS.Frontend",
+    "file": "src/pages/system-admin/systemAdminNavItems.js",
+    "from": 29,
+    "language": "jsx",
+    "code": "import { LayoutDashboard, CalendarClock, CalendarSearch, CalendarDays, Bell, Settings, LifeBuoy, MapPinned, ShieldCheck, History, Inbox } from 'lucide-react'\nimport { ROUTES } from '../../constants/routes'\n\nexport const SYSTEM_ADMIN_NAV_ITEMS = [\n  { section: 'Overview', label: 'Dashboard', path: ROUTES.SYSTEM_ADMIN_DASHBOARD, icon: LayoutDashboard },\n  { section: 'Scheduling', label: 'Timetable Management', path: ROUTES.TIMETABLE_MANAGEMENT, icon: CalendarClock },\n  { section: 'Scheduling', label: 'Find a Timetable', path: ROUTES.SYSTEM_ADMIN_FIND_TIMETABLE, icon: CalendarSearch },\n  { section: 'Scheduling', label: 'Calendar Management', path: ROUTES.SYSTEM_ADMIN_CALENDAR, icon: CalendarDays },"
+  },
+  "welcome-backgrounds": {
+    "repo": "ARMS.Frontend",
+    "file": "src/components/dashboard/welcomeBackgrounds.js",
+    "from": 52,
+    "language": "jsx",
+    "code": "/** The house tint. A brighter picture overrides it with a higher number. */\nconst DEFAULT_OVERLAY = 0.3\n\nconst DEPARTMENT_BACKGROUNDS = [\n  {\n    key: 'computer-science',\n    pattern: /computer\\s+science/i,\n    image: computerScience,\n    position: 'center 62%',\n    overlayOpacity: 0.35,\n  },"
+  },
+  "variables-radii-shadows": {
+    "repo": "ARMS.Frontend",
+    "file": "src/styles/variables.css",
+    "from": 56,
+    "language": "css",
+    "code": "  /*\n   * Corner radii (ARMS-prefixed so they don't collide with Tailwind's\n   * --radius-* theme names): xs for tiny marks, sm for chips and small\n   * controls, md for buttons and inputs, lg for cards and panels.\n   */\n  --arms-radius-xs: 0.25rem;\n  --arms-radius-sm: 0.375rem;\n  --arms-radius-md: 0.5rem;\n  --arms-radius-lg: 0.75rem;\n  --arms-radius-full: 9999px;\n\n  /* Elevation: sm for resting cards, md for hover/raised, lg for overlays. */\n  --arms-shadow-sm: 0 2px 8px rgb(0 0 0 / 0.05);\n  --arms-shadow-md: 0 4px 10px rgb(0 0 0 / 0.12);\n  --arms-shadow-lg: 0 8px 24px rgb(0 0 0 / 0.16);"
+  },
+  "dashboard-layout": {
+    "repo": "ARMS.Frontend",
+    "file": "src/styles/dashboardLayout.css",
+    "from": 21,
+    "language": "css",
+    "code": ".dashboard-layout {\n  display: flex;\n  min-height: 100vh;\n}\n\n.dashboard-main {\n  flex: 1;\n  display: flex;\n  flex-direction: column;\n  min-width: 0;\n}\n\n.dashboard-content {\n  flex: 1;\n}"
+  },
+  "index-dark-variant": {
+    "repo": "ARMS.Frontend",
+    "file": "src/index.css",
+    "from": 52,
+    "language": "css",
+    "code": "/*\n * tut-components-library's compiled CSS defines its dark palette under a\n * literal `.dark{...}` class selector (see dist/styles.css) — a class you\n * toggle, not `prefers-color-scheme`. Tailwind v4's `dark:` variant defaults\n * to a `prefers-color-scheme` media query unless told otherwise, which would\n * silently ignore the `.dark` class ThemeContext toggles on <html>. This\n * repoints `dark:` at that same class so ARMS's own `dark:` utilities\n * (e.g. `dark:bg-sidebar`) react to the same toggle as the library's tokens.\n */\n@custom-variant dark (&:where(.dark, .dark *));"
+  },
+  "theme-apply": {
+    "repo": "ARMS.Frontend",
+    "file": "src/utils/theme.js",
+    "from": 71,
+    "language": "jsx",
+    "code": "/** Toggles the `dark` class on `<html>` to match the given theme preference. */\nexport function applyTheme(theme) {\n  if (typeof document === 'undefined') return\n  const isDark = resolveIsDark(theme)\n  document.documentElement.classList.toggle('dark', isDark)\n  applyFavicon(isDark)\n}"
+  }
+}
