@@ -27,5 +27,6 @@ export const backCoverHeading = 'KEY TAKEAWAYS FROM AUTHORS'
 /** Special message page (page 1). */
 export const dedication = {
   heading: 'To the Devs',
-  message: 'A very healthy and happy working environment you have created. Thank you.',
+  message: 'A very healthy and happy working environment you have created.',
+  thanks: 'Thank you',
 }
