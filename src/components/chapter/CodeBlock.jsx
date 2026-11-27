@@ -8,6 +8,8 @@ import './code.css'
 function asComment(text, language) {
   if (language === 'css') return `/* ${text} */`
   if (language === 'markup') return `<!-- ${text} -->`
+  if (language === 'sql') return `-- ${text}`
+  if (language === 'yaml') return `# ${text}`
   return `// ${text}`
 }
 

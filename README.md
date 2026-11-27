@@ -22,7 +22,7 @@ Turn pages by clicking/dragging a page corner, with the arrow buttons, or with t
 scripts/
   crop-author-photos.mjs     originals -> grayscale portraits + puzzle crops (crop boxes live here)
   extract-snippets.mjs       copies the code excerpts from the ARMS repos -> src/data/snippets.json
-  snippets/                  which ARMS files/lines each chapter shows (uiux, frontend*, backend); never include appsettings files
+  snippets/                  which ARMS files/lines each chapter shows (uiux, frontend*, backend, integration, database); never include files with credentials
 src/
   assets/screens/            ARMS screenshots shown on chapter pages
   assets/authors/
@@ -60,7 +60,7 @@ src/
 - **New or replaced photo** – put the original in `src/assets/authors/originals/<id>.jpg`, add its crop box in `scripts/crop-author-photos.mjs`, run `npm run photos`.
 - **Table of contents** – edit `src/data/contents.js`. Contents pages paginate themselves; long categories run onto extra pages.
 - **Add a chapter** – a chapter is one two-page spread, or several (`spreads: [...]`, each with a `heading`) for a bigger feature. Left page: explanation, an optional visual (`{ type: 'steps' | 'tree' | 'table', ... }`), key points and "See also" links (`related`). Right page: an optional ARMS screenshot (click to hide it, "Show Image Again" to bring it back) above the code.
-  1. Add the code ranges to a list in `scripts/snippets/` (or `scripts/extract-snippets.mjs`) and run `npm run snippets`. `notes: { 42: 'text' }` adds a handbook explanation after line 42 (shown in gold with ✎, so it is never mistaken for ARMS code).
+  1. Add the code ranges to a list in `scripts/snippets/` (or `scripts/extract-snippets.mjs`) and run `npm run snippets`. `notes: { 42: 'text' }` adds a handbook explanation after line 42 (shown in gold with ✎, so it is never mistaken for ARMS code). The extractor refuses credential files (appsettings*.json, .env, ArmsDbContextFactory.cs) and stops if an excerpt looks like it holds a password, key or connection string.
   2. Put the screenshot in `src/assets/screens/` (Frontend chapters: `src/assets/screens/frontend/`, referenced by name with `screen()`).
   3. Add the chapter to its category file in `src/data/chapters/` (Frontend: `src/data/chapters/frontend/`, one file per group).
   4. Set `pageId` (the chapter id) on its entry in `src/data/contents.js`. The entry then shows its page number and becomes a link (until then it shows "soon").

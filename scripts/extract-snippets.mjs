@@ -45,7 +45,12 @@ const SNIPPETS = [
   { id: 'sidebar-logo-collapse', repo: 'frontend', file: 'src/styles/sidebar.css', from: 182, to: 188 },
 ]
 
-const LANGS = { css: 'css', js: 'jsx', jsx: 'jsx', mjs: 'jsx', ts: 'tsx', tsx: 'tsx', cs: 'csharp', json: 'json', html: 'markup', yaml: 'yaml', yml: 'yaml' }
+const LANGS = { css: 'css', js: 'jsx', jsx: 'jsx', mjs: 'jsx', ts: 'tsx', tsx: 'tsx', cs: 'csharp', json: 'json', html: 'markup', yaml: 'yaml', yml: 'yaml', sql: 'sql' }
+
+// The handbook is public. Files that hold credentials are never excerpted, and
+// any excerpt that looks like it contains a secret stops the extraction.
+const BLOCKED_FILES = [/appsettings[^/]*\.json$/i, /(^|\/)\.env$/, /DbContextFactory\.cs$/]
+const SECRET_PATTERNS = [/\bPassword=[^;"'\s{]{4,};/i,/\bAVNS_/, /SecretKey"\s*:/i, /\$2[abxy]\$\d\d\$[./A-Za-z0-9]{50,}/, /Host=[\w.-]+\.(com|net|cloud)/i]
 
 // Chapter snippet lists: every file in scripts/snippets/ exports SNIPPETS.
 const snippetDir = join(root, 'scripts/snippets')
@@ -58,18 +63,22 @@ const ALL = [...SNIPPETS, ...lists.flat()]
 const out = {}
 for (const s of ALL) {
   if (out[s.id]) throw new Error(`duplicate snippet id ${s.id}`)
+  if (BLOCKED_FILES.some((re) => re.test(s.file))) throw new Error(`${s.id}: ${s.file} holds credentials and must not be excerpted`)
   const lines = readFileSync(join(repos[s.repo], s.file), 'utf8').split(/\r?\n/)
   if (s.to > lines.length) throw new Error(`${s.id}: ${s.file} has only ${lines.length} lines`)
   // notes: handbook explanations shown after a line, keyed by that line's real number
   for (const line of Object.keys(s.notes ?? {})) {
     if (line < s.from || line > s.to) throw new Error(`${s.id}: note on line ${line} is outside ${s.from}-${s.to}`)
   }
+  const code = lines.slice(s.from - 1, s.to).join('\n')
+  const leak = SECRET_PATTERNS.find((re) => re.test(code))
+  if (leak) throw new Error(`${s.id}: excerpt looks like it contains a secret (${leak}); pick other lines`)
   out[s.id] = {
     repo: repoName[s.repo],
     file: s.file,
     from: s.from,
     language: s.language ?? LANGS[s.file.split('.').pop()] ?? 'clike',
-    code: lines.slice(s.from - 1, s.to).join('\n'),
+    code,
     ...(s.notes ? { notes: s.notes } : {}),
   }
 }

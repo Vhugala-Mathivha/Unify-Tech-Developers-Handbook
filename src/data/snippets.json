@@ -1004,6 +1004,404 @@
       "40": "Only ever the signed-in student’s own tickets"
     }
   },
+  "db-sql-header": {
+    "repo": "ARMS.Backend",
+    "file": "docs/arms_database_full.sql",
+    "from": 4,
+    "language": "sql",
+    "code": "--  Target: PostgreSQL (single database, multiple schemas = microservice\n--          boundaries). Cross-schema links are LOGICAL (plain integers),\n--          not foreign keys.\n--\n--  WHAT CHANGED vs the previous script\n--  ----------------------------------\n--   * timetable_db.class_timetable_entry\n--       - dropped   : module_id, group_name\n--       - added     : group_id (logical link -> academic_db.group)\n--       - added     : status ('Uploaded' by default), created_at\n--       - relaxed   : lecturer_user_id is now NULLABLE (some spreadsheet\n--                     rows have no lecturer); academic_week defaults to 1\n--   * academic_db.lecturer_module\n--       - added     : office_number\n--   * academic_db.student_group + identity_db.otp are included (the app\n--     needs them and the old script was missing them)\n--\n--  Role ids match your current database: SystemAdmin=1, Lecturer=2,\n--  Student=3. The app checks roles by NAME, so the numbering does not\n--  matter as long as it is consistent.\n--\n--  The app's DbInitializer also runs \"CREATE TABLE IF NOT EXISTS\" /\n--  \"ALTER TABLE ... ADD COLUMN IF NOT EXISTS\" on every startup, so running\n--  this script is optional - it is the source of truth for the schema.",
+    "notes": {
+      "4": "One PostgreSQL database; each schema is one area of the system",
+      "5": "Tables in different schemas are linked by plain id columns, not foreign keys",
+      "26": "The script is the reference for the schema; the API also patches it at startup"
+    }
+  },
+  "db-schemas": {
+    "repo": "ARMS.Backend",
+    "file": "docs/arms_database_full.sql",
+    "from": 103,
+    "language": "sql",
+    "code": "-- =====================================================================\n-- STEP 2: SCHEMAS\n-- =====================================================================\nCREATE SCHEMA identity_db;\nCREATE SCHEMA academic_db;\nCREATE SCHEMA timetable_db;\nCREATE SCHEMA system_db;\nCREATE SCHEMA management_db;",
+    "notes": {
+      "106": "Users, roles, students, lecturers, admins and OTP codes",
+      "107": "Faculties, departments, courses, modules and groups",
+      "108": "Uploaded timetables and their class / test entries",
+      "109": "Notifications and support tickets",
+      "110": "Permissions and user settings: no C# code maps these tables"
+    }
+  },
+  "db-context-sets": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Persistence/Context/ArmsDbContext.cs",
+    "from": 8,
+    "language": "csharp",
+    "code": "public class ArmsDbContext : DbContext, IApplicationDbContext\n{\n    public ArmsDbContext(DbContextOptions<ArmsDbContext> options)\n        : base(options)\n    {\n    }\n\n    // =========================================================\n    // IDENTITY DB\n    // =========================================================\n\n    public DbSet<Role> Roles => Set<Role>();\n\n    public DbSet<User> Users => Set<User>();\n\n    public DbSet<Student> Students => Set<Student>();\n\n    public DbSet<Lecturer> Lecturers => Set<Lecturer>();\n\n    public DbSet<SystemAdmin> SystemAdmins => Set<SystemAdmin>();\n\n    public DbSet<SupportStaff> SupportStaff => Set<SupportStaff>();\n\n    public DbSet<BookingSettings> BookingSettings => Set<BookingSettings>();\n\n    public DbSet<BookingTypeRule> BookingTypeRules => Set<BookingTypeRule>();\n\n    public DbSet<SpecialBooking> SpecialBookings => Set<SpecialBooking>();\n\n    public DbSet<SpecialBookingLab> SpecialBookingLabs => Set<SpecialBookingLab>();\n\n    public DbSet<AdminRequestReminder> AdminRequestReminders => Set<AdminRequestReminder>();\n\n    public DbSet<Otp> Otps => Set<Otp>();\n\n    // =========================================================\n    // STUDENT / GROUP\n    // =========================================================\n\n    public DbSet<Group> Groups => Set<Group>();\n\n    public DbSet<StudentGroup> StudentGroups => Set<StudentGroup>();\n\n    public DbSet<StudentEnrollment> StudentEnrollments\n        => Set<StudentEnrollment>();\n\n    // =========================================================\n    // ACADEMIC\n    // =========================================================\n\n    public DbSet<Faculty> Faculties => Set<Faculty>();\n\n    public DbSet<Department> Departments => Set<Department>();\n\n    public DbSet<Module> Modules => Set<Module>();",
+    "notes": {
+      "8": "IApplicationDbContext: the Application layer only sees this interface",
+      "15": "Each DbSet is one table; the banners group them by schema",
+      "41": "One-time sign-in codes",
+      "58": "The academic structure"
+    }
+  },
+  "db-context-model": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Persistence/Context/ArmsDbContext.cs",
+    "from": 101,
+    "language": "csharp",
+    "code": "    // =========================================================\n    // SYSTEM\n    // =========================================================\n\n    public DbSet<Notification> Notifications\n        => Set<Notification>();\n\n    public DbSet<UserNotification> UserNotifications\n        => Set<UserNotification>();\n\n    public DbSet<SupportTicket> SupportTickets\n        => Set<SupportTicket>();\n\n    // =========================================================\n    // ACADEMIC PLANNER\n    // =========================================================\n\n    public DbSet<AcademicPlanner> AcademicPlanners\n        => Set<AcademicPlanner>();\n\n    // =========================================================\n    // ACADEMIC CALENDAR EVENTS\n    // =========================================================\n\n    public DbSet<AcademicCalendarEvent> AcademicCalendarEvents\n        => Set<AcademicCalendarEvent>();\n\n    // =========================================================\n    // MODEL CONFIGURATION\n    // =========================================================\n\n    protected override void OnModelCreating(\n        ModelBuilder modelBuilder)\n    {\n        base.OnModelCreating(modelBuilder);\n\n        // Apply existing entity configurations.\n        modelBuilder.ApplyConfigurationsFromAssembly(\n            typeof(ArmsDbContext).Assembly);\n",
+    "notes": {
+      "138": "Picks up every IEntityTypeConfiguration class in Persistence/Configurations"
+    }
+  },
+  "db-timetable-context": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Persistence/Context/TimetableDbContext.cs",
+    "from": 7,
+    "language": "csharp",
+    "code": "public class TimetableDbContext : DbContext\n{\n    public TimetableDbContext(DbContextOptions<TimetableDbContext> options) : base(options) { }\n\n    public DbSet<ClassTimetableEntry> ClassTimetableEntry => Set<ClassTimetableEntry>();\n    public DbSet<TestTimetableEntry> TestTimetableEntry => Set<TestTimetableEntry>();\n    public DbSet<ManagedTimetable> ManagedTimetables => Set<ManagedTimetable>();\n\n    protected override void OnModelCreating(ModelBuilder modelBuilder)\n    {\n        base.OnModelCreating(modelBuilder);\n\n        modelBuilder.ApplyConfigurationsFromAssembly(typeof(TimetableDbContext).Assembly);\n    }\n\n    // Everything in this context is timetable data, so any save\n    // evicts the cached per-student timetables. (The bulk\n    // ExecuteUpdate/ExecuteDelete calls in TimetablesController are\n    // always followed by a SaveChanges on the same context.)\n    public override async Task<int> SaveChangesAsync(\n        bool acceptAllChangesOnSuccess,\n        CancellationToken cancellationToken = default)\n    {\n        var result = await base.SaveChangesAsync(\n            acceptAllChangesOnSuccess,\n            cancellationToken);\n\n        CacheRegions.AcademicData.Invalidate();\n\n        return result;\n    }",
+    "notes": {
+      "7": "A second context for the timetable tables; its connection string may point at another database",
+      "19": "Uses the same configuration classes as ArmsDbContext",
+      "34": "Saving any timetable data empties the cached personal timetables"
+    }
+  },
+  "db-user-entity": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Domain/Entities/User.cs",
+    "from": 5,
+    "language": "csharp",
+    "code": "public class User\n{\n    public int user_id { get; set; }\n\n    [Required]\n    [MaxLength(100)]\n    public string full_name { get; set; } = string.Empty;\n\n    [Required]\n    [MaxLength(50)]\n    public string surname { get; set; } = string.Empty;\n\n    [Required]\n    [MaxLength(100)]\n    [EmailAddress]\n    public string email { get; set; } = string.Empty;\n\n    [Required]\n    public string password_hash { get; set; } = string.Empty;\n\n    public int role_id { get; set; } \n\n    public DateTime registration_date { get; set; } \n\n    public DateTime registered_at { get; set; }\n\n   public Role? Role { get; set;}\n\n}",
+    "notes": {
+      "7": "Property names are the column names (snake_case), so little mapping is needed",
+      "23": "Only ever a BCrypt hash",
+      "31": "Navigation property: EF loads the role with .Include(u => u.Role)"
+    }
+  },
+  "db-user-config": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Persistence/Configurations/UserConfiguration.cs",
+    "from": 7,
+    "language": "csharp",
+    "code": "public class UserConfiguration : IEntityTypeConfiguration<User>\n{\n    public void Configure(EntityTypeBuilder<User> builder)\n    {\n        builder.ToTable(\"user\", \"identity_db\");\n\n        builder.HasKey(u => u.user_id);\n\n        builder.Property(u => u.user_id)\n            .ValueGeneratedOnAdd();\n\n        builder.Property(u => u.full_name)\n            .IsRequired()\n            .HasMaxLength(100);\n\n        builder.Property(u => u.surname)\n            .IsRequired()\n            .HasMaxLength(50);\n\n        builder.Property(u => u.email)\n            .IsRequired()\n            .HasMaxLength(100);\n\n        builder.HasIndex(u => u.email)\n            .IsUnique();\n\n        builder.Property(u => u.password_hash)\n            .IsRequired();\n\n        builder.Property(u => u.role_id)\n            .IsRequired();\n\n        builder.Property(u => u.registration_date)\n            .IsRequired();\n\n        builder.Property(u => u.registered_at)\n            .IsRequired();\n\n        // User -> Role\n        builder.HasOne(u => u.Role)\n            .WithMany()\n            .HasForeignKey(u => u.role_id)\n            .OnDelete(DeleteBehavior.Restrict);\n    }",
+    "notes": {
+      "11": "identity_db.\"user\": the table name and its schema",
+      "30": "One account per email address",
+      "49": "Restrict: a role in use cannot be deleted"
+    }
+  },
+  "db-migration": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Persistence/Migrations/20261117150000_AddLabAccessRequestDateRange.cs",
+    "from": 10,
+    "language": "csharp",
+    "code": "[DbContext(typeof(ArmsDbContext))]\n[Migration(\"20261117150000_AddLabAccessRequestDateRange\")]\npublic partial class AddLabAccessRequestDateRange : Migration\n{\n    protected override void Up(MigrationBuilder migrationBuilder)\n    {\n        migrationBuilder.AddColumn<DateOnly>(\n            name: \"start_at\",\n            schema: \"lab_booking_db\",\n            table: \"lab_access_request\",\n            type: \"date\",\n            nullable: true);\n\n        migrationBuilder.AddColumn<DateOnly>(\n            name: \"end_at\",\n            schema: \"lab_booking_db\",\n            table: \"lab_access_request\",\n            type: \"date\",\n            nullable: true);\n\n        migrationBuilder.Sql(\n            \"\"\"\n            UPDATE lab_booking_db.lab_access_request\n            SET start_at = requested_at::date,\n                end_at = requested_at::date;\n            \"\"\");\n\n        migrationBuilder.AlterColumn<DateOnly>(\n            name: \"start_at\",\n            schema: \"lab_booking_db\",\n            table: \"lab_access_request\",\n            type: \"date\",\n            nullable: false,\n            oldClrType: typeof(DateOnly),\n            oldType: \"date\",\n            oldNullable: true);\n\n        migrationBuilder.AlterColumn<DateOnly>(\n            name: \"end_at\",\n            schema: \"lab_booking_db\",\n            table: \"lab_access_request\",\n            type: \"date\",\n            nullable: false,\n            oldClrType: typeof(DateOnly),\n            oldType: \"date\",\n            oldNullable: true);\n    }\n\n    protected override void Down(MigrationBuilder migrationBuilder)\n    {\n        migrationBuilder.DropColumn(\n            name: \"start_at\",\n            schema: \"lab_booking_db\",\n            table: \"lab_access_request\");\n\n        migrationBuilder.DropColumn(\n            name: \"end_at\",\n            schema: \"lab_booking_db\",\n            table: \"lab_access_request\");\n    }",
+    "notes": {
+      "11": "The timestamp in the id orders the migrations",
+      "16": "Up: add the columns as nullable first…",
+      "30": "…fill them for the rows that already exist…",
+      "37": "…then make them required",
+      "58": "Down: how to undo it"
+    }
+  },
+  "db-init-extension": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Extensions/DatabaseExtensions.cs",
+    "from": 11,
+    "language": "csharp",
+    "code": "    public static async Task InitialiseDatabaseAsync(\n        this WebApplication app)\n    {\n        using var scope = app.Services.CreateScope();\n\n        var services = scope.ServiceProvider;\n\n        var initializer =\n            services.GetRequiredService<DbInitializer>();\n\n        var logger =\n            services.GetRequiredService<ILogger<DbInitializer>>();\n\n        try\n        {\n            // =====================================================\n            // APPLY DATABASE MIGRATIONS\n            // =====================================================\n\n            await initializer.InitialiseAsync();\n\n            // =====================================================\n            // SEED DEFAULT ADMINS\n            // =====================================================\n\n            await initializer.SeedDefaultAdminsAsync();\n\n            logger.LogInformation(\n                \"ARMS database initialization completed successfully.\");\n        }\n        catch (Exception ex)\n        {\n            logger.LogError(\n                ex,\n                \"ARMS database initialization failed.\");\n            \n            throw;\n        }\n    }",
+    "notes": {
+      "11": "Called from Program.cs before the API accepts requests",
+      "27": "The banner says “migrations”, but no Migrate() call is made: InitialiseAsync runs SQL checks",
+      "47": "A failure stops the API from starting"
+    }
+  },
+  "db-init-steps": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Persistence/Context/DbInitializer.cs",
+    "from": 44,
+    "language": "csharp",
+    "code": "    public async Task InitialiseAsync(\n        CancellationToken cancellationToken = default)\n    {\n        _logger.LogInformation(\n            \"Checking identity database...\");\n\n        await TimeAsync(\n            \"OTP table check\",\n            EnsureOtpTableAsync,\n            cancellationToken);\n\n        await TimeAsync(\n            \"Timetable schema\",\n            EnsureTimetableSchemaAsync,\n            cancellationToken);\n\n        await TimeAsync(\n            \"Academic schema\",\n            EnsureAcademicSchemaAsync,\n            cancellationToken);\n\n        await TimeAsync(\n            \"System schema\",\n            EnsureSystemSchemaAsync,\n            cancellationToken);\n\n        await TimeAsync(\n            \"Lab booking schema\",\n            EnsureLabBookingSchemaAsync,\n            cancellationToken);\n\n        await TimeAsync(\n            \"Booking approval schema\",\n            EnsureBookingApprovalSchemaAsync,\n            cancellationToken);\n\n        await TimeAsync(\n            \"Booking contacts and rules schema\",\n            EnsureBookingContactsAndRulesSchemaAsync,\n            cancellationToken);\n\n        await TimeAsync(\n            \"Split combined class groups\",\n            async ct =>\n            {\n                // Must not stop the API from starting: on failure the\n                // transaction rolls back and it retries next start.\n                try\n                {\n                    await SplitCombinedGroupsAsync(ct);\n                }\n                catch (Exception ex)\n                {\n                    _context.ChangeTracker.Clear();\n\n                    _logger.LogError(\n                        ex,\n                        \"Splitting combined class groups failed; will retry on next start.\");\n                }\n            },\n            cancellationToken);\n\n        await TimeAsync(\n            \"Academic calendar import\",\n            EnsureAcademicCalendarImportedAsync,\n            cancellationToken);\n\n        await TimeAsync(\n            \"Clear public schema\",\n            ClearPublicSchemaAsync,\n            cancellationToken);\n\n        await TimeAsync(\n            \"Seed roles\",\n            SeedRolesAsync,\n            cancellationToken);\n\n        await TimeAsync(\n            \"Seed default admins\",\n            SeedDefaultAdminsAsync,\n            cancellationToken);\n\n        await TimeAsync(\n            \"Seed test lecturers\",\n            SeedTestLecturersAsync,\n            cancellationToken);\n\n        _logger.LogInformation(\n            \"Identity database initialization completed successfully.\");\n    }",
+    "notes": {
+      "50": "Each step is timed and logged (\"[Startup] … took … ms\")",
+      "55": "Schema steps: CREATE … IF NOT EXISTS / ADD COLUMN IF NOT EXISTS, safe on every start",
+      "85": "A one-off data fix that is allowed to fail and retry next time",
+      "116": "Seeding comes last, once the tables are certain to exist"
+    }
+  },
+  "db-ensure-labs": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Persistence/Context/DbInitializer.cs",
+    "from": 135,
+    "language": "csharp",
+    "code": "    // =========================================================\n    // LAB BOOKING SCHEMA (lab_booking_db)\n    // =========================================================\n    //\n    // lab_booking_db is created by the project SQL script, not by EF. This\n    // only adds the columns the C# model reads, and only when the labs table\n    // exists, so a database without the lab tables still starts.\n    //\n    //   is_lab       true = computer lab, false = classroom\n    //   is_available false = active venue that temporarily cannot be booked\n    //                (is_active = false hides the venue entirely)\n\n    private async Task EnsureLabBookingSchemaAsync(\n        CancellationToken cancellationToken)\n    {\n        await _context.Database.ExecuteSqlRawAsync(\n            \"\"\"\n            DO $$\n            BEGIN\n                IF to_regclass('lab_booking_db.labs') IS NOT NULL THEN\n                    ALTER TABLE lab_booking_db.labs\n                        ADD COLUMN IF NOT EXISTS is_lab BOOLEAN NOT NULL DEFAULT FALSE;\n\n                    ALTER TABLE lab_booking_db.labs\n                        ADD COLUMN IF NOT EXISTS is_available BOOLEAN NOT NULL DEFAULT TRUE;\n                END IF;\n            END $$;\n            \"\"\",\n            cancellationToken);\n    }",
+    "notes": {
+      "139": "lab_booking_db comes from the SQL script, so the API only adds missing columns",
+      "154": "to_regclass: skip quietly when the table is not there"
+    }
+  },
+  "db-ensure-otp": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Persistence/Context/DbInitializer.cs",
+    "from": 390,
+    "language": "csharp",
+    "code": "    private async Task EnsureOtpTableAsync(\n        CancellationToken cancellationToken)\n    {\n        const string sql = @\"\n            CREATE SCHEMA IF NOT EXISTS identity_db;\n\n            CREATE TABLE IF NOT EXISTS identity_db.otp (\n                otp_id      SERIAL PRIMARY KEY,\n                email       VARCHAR(100) NOT NULL,\n                code_hash   TEXT NOT NULL,\n                created_at  TIMESTAMP NOT NULL,\n                expires_at  TIMESTAMP NOT NULL,\n                is_used     BOOLEAN NOT NULL,\n                attempts    INTEGER NOT NULL\n            );\n\n            CREATE INDEX IF NOT EXISTS ix_otp_email\n                ON identity_db.otp (email);\n        \";\n\n        // Ensure timetable schema/tables exist in the timetable DB (may be separate)\n        var db = _timetableContext ?? (DbContext)_context;\n\n        await db.Database.ExecuteSqlRawAsync(\n            sql,\n            cancellationToken);\n\n        _logger.LogInformation(\n            \"Ensured identity_db.otp table exists.\");\n    }",
+    "notes": {
+      "396": "Matches the OTP entity and docs/arms_database_full.sql",
+      "411": "Watch out: this runs on the timetable context. If the timetable connection string points at a separate database, otp is created there instead"
+    }
+  },
+  "db-clear-public": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Persistence/Context/DbInitializer.cs",
+    "from": 1061,
+    "language": "csharp",
+    "code": "    private async Task ClearPublicSchemaAsync(\n        CancellationToken cancellationToken)\n    {\n        const string sql = @\"\n            DROP TABLE IF EXISTS public.reservations;\n            DROP TABLE IF EXISTS public.loans;\n            DROP TABLE IF EXISTS public.academic_resources;\n            DROP TABLE IF EXISTS public.\"\"ResourceCategory\"\";\n            DROP TABLE IF EXISTS public.\"\"Location\"\";\n            DROP TABLE IF EXISTS public.department;\n            DROP TABLE IF EXISTS public.departments;\n        \";\n\n        await _context.Database.ExecuteSqlRawAsync(\n            sql,\n            cancellationToken);\n\n        _logger.LogInformation(\n            \"Cleared public schema tables.\");\n    }",
+    "notes": {
+      "1064": "Tables left in the public schema by early migrations; nothing uses them any more"
+    }
+  },
+  "db-seed-roles": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Persistence/Context/DbInitializer.cs",
+    "from": 1086,
+    "language": "csharp",
+    "code": "    private async Task SeedRolesAsync(\n        CancellationToken cancellationToken)\n    {\n        var roles = new[]\n        {\n            \"Student\",\n            \"Lecturer\",\n            \"SystemAdmin\"\n        };\n\n        var existing = await _context.Roles\n            .Where(r => roles.Contains(r.name))\n            .Select(r => r.name)\n            .ToListAsync(cancellationToken);\n\n        foreach (var roleName in roles)\n        {\n            if (existing.Contains(roleName))\n            {\n                continue;\n            }\n\n            _context.Roles.Add(\n                new Role\n                {\n                    name = roleName\n                });\n        }\n\n        if (_context.ChangeTracker.HasChanges())\n        {\n            await _context.SaveChangesAsync(\n                cancellationToken);\n        }\n\n        _logger.LogInformation(\n            \"Default roles seeded.\");\n    }",
+    "notes": {
+      "1091": "The app checks roles by name, so the ids do not matter",
+      "1103": "Only missing roles are added: running it again changes nothing"
+    }
+  },
+  "db-seed-admin": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Persistence/Context/DbInitializer.cs",
+    "from": 1336,
+    "language": "csharp",
+    "code": "    private async Task SeedAdminAsync(\n        string configKey,\n        CancellationToken cancellationToken)\n    {\n        var section =\n            _configuration.GetSection(\n                $\"DefaultAdmins:{configKey}\");\n\n        var email =\n            section[\"Email\"]?\n                .Trim()\n                .ToLowerInvariant();\n\n        if (string.IsNullOrWhiteSpace(email))\n        {\n            _logger.LogWarning(\n                \"DefaultAdmins:{ConfigKey}:Email is not configured. \" +\n                \"Skipping administrator seed.\",\n                configKey);\n\n            return;\n        }\n\n        var password =\n            section[\"Password\"];\n\n        if (string.IsNullOrWhiteSpace(password))\n        {\n            _logger.LogWarning(\n                \"DefaultAdmins:{ConfigKey}:Password is not configured. \" +\n                \"Skipping administrator seed.\",\n                configKey);\n\n            return;\n        }\n\n        var fullNames =\n            section[\"FullNames\"]?.Trim()\n            ?? \"System\";\n\n        var surname =\n            section[\"Surname\"]?.Trim()\n            ?? \"Administrator\";",
+    "notes": {
+      "1341": "Read from configuration (DefaultAdmins:SystemAdmin), never written in code",
+      "1349": "Nothing configured: the seed is skipped with a warning"
+    }
+  },
+  "db-sql-approval": {
+    "repo": "ARMS.Backend",
+    "file": "docs/booking_approval_2026-11-19.sql",
+    "from": 1,
+    "language": "sql",
+    "code": "-- =====================================================================\n-- ARMS - Booking approval, special bookings, daily slot limit, reminders\n-- The API applies the same statements itself at startup\n-- (DbInitializer.EnsureBookingApprovalSchemaAsync); this script is for\n-- applying them by hand. Safe to run again (IF NOT EXISTS).\n--\n-- Support staff (Lab Technician / Security Officer) already live in\n-- identity_db.support_staff and need no change.\n-- =====================================================================\n\nBEGIN;\n\n-- ---------------------------------------------------------------------\n-- 1. Booking approval\n--    08:00-15:00 (SAST) a booking is PENDING until a System Admin approves\n--    or rejects it; 15:01-07:59 it is APPROVED straight away (as before).\n--    PENDING requests no longer hold the venue: several people may ask for\n--    the same venue and period, the admin decides. Only APPROVED bookings\n--    may not overlap.\n-- ---------------------------------------------------------------------\n\nALTER TABLE lab_booking_db.lab_bookings\n    ADD COLUMN IF NOT EXISTS reviewed_by_user_id INTEGER,          -- identity_db.user; NULL = decided by the system\n    ADD COLUMN IF NOT EXISTS reviewed_at         TIMESTAMPTZ,\n    ADD COLUMN IF NOT EXISTS review_note         VARCHAR(500),     -- why rejected / why another venue was given\n    ADD COLUMN IF NOT EXISTS original_lab_id     BIGINT;           -- the venue asked for, when the admin gave another\n\n-- Rebuilt only while it still covers PENDING (re-running takes no lock).\nDO $$\nBEGIN\n    IF NOT EXISTS (\n            SELECT 1 FROM pg_constraint\n            WHERE conname = 'ex_lab_bookings_no_overlap'\n              AND conrelid = 'lab_booking_db.lab_bookings'::regclass)\n       OR EXISTS (\n            SELECT 1 FROM pg_constraint\n            WHERE conname = 'ex_lab_bookings_no_overlap'\n              AND conrelid = 'lab_booking_db.lab_bookings'::regclass\n              AND pg_get_constraintdef(oid) LIKE '%PENDING%') THEN\n        ALTER TABLE lab_booking_db.lab_bookings\n            DROP CONSTRAINT IF EXISTS ex_lab_bookings_no_overlap;\n        ALTER TABLE lab_booking_db.lab_bookings\n            ADD CONSTRAINT ex_lab_bookings_no_overlap\n            EXCLUDE USING gist (lab_id WITH =, tstzrange(start_at, end_at, '[)') WITH &&)\n            WHERE (status = 'APPROVED');\n    END IF;\nEND $$;\n\nCREATE INDEX IF NOT EXISTS ix_lab_bookings_pending\n    ON lab_booking_db.lab_bookings (created_at)\n    WHERE status = 'PENDING';",
+    "notes": {
+      "5": "Every script is idempotent: safe to run again",
+      "11": "BEGIN … COMMIT: all of it is applied, or none",
+      "44": "An exclusion constraint: two APPROVED bookings for one venue cannot overlap in time",
+      "49": "A partial index that covers only pending bookings, for the approval queue"
+    }
+  },
+  "db-sql-venues": {
+    "repo": "ARMS.Backend",
+    "file": "docs/venue_management_2026-11-19.sql",
+    "from": 1,
+    "language": "sql",
+    "code": "-- =====================================================================\n-- ARMS - Venue management (System Admin \"Add venue\" + Venue Activity)\n-- Run once against the ARMS database. Safe to run again (IF NOT EXISTS).\n-- =====================================================================\n\nBEGIN;\n\n-- ---------------------------------------------------------------------\n-- 1. Venue details from the Add venue form that labs had no column for.\n-- ---------------------------------------------------------------------\n\nALTER TABLE lab_booking_db.labs\n    ADD COLUMN IF NOT EXISTS floor          VARCHAR(20),\n    ADD COLUMN IF NOT EXISTS accessibility  VARCHAR(200),\n    ADD COLUMN IF NOT EXISTS opens_hour     SMALLINT NOT NULL DEFAULT 0,\n    ADD COLUMN IF NOT EXISTS closes_hour    SMALLINT NOT NULL DEFAULT 24;\n\n-- Opening hours: whole hours, 0 (00:00) to 24 (24:00), opens before closes.\n-- Existing venues get 00:00-24:00, i.e. no change to what can be booked.\nDO $$\nBEGIN\n    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_labs_opening_hours') THEN\n        ALTER TABLE lab_booking_db.labs\n            ADD CONSTRAINT ck_labs_opening_hours\n            CHECK (opens_hour >= 0 AND closes_hour <= 24 AND opens_hour < closes_hour);\n    END IF;\nEND $$;\n\n-- Seats may be left empty (\"Not counted yet\"). labs_capacity_check\n-- (capacity > 0) still applies whenever a number is given.\nALTER TABLE lab_booking_db.labs\n    ALTER COLUMN capacity DROP NOT NULL;\n\n-- ---------------------------------------------------------------------\n-- 2. Venue Activity: who did what to venues, bookings and lab access.\n-- ---------------------------------------------------------------------\n\nCREATE TABLE IF NOT EXISTS lab_booking_db.venue_activity (\n    activity_id    BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,\n    occurred_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),\n    actor_user_id  INTEGER,                     -- identity_db.user.user_id; NULL = the system\n    actor_name     VARCHAR(150) NOT NULL,\n    actor_role     VARCHAR(50)  NOT NULL,       -- Lecturer, Tutor, Mentor, Student, System Admin, System\n    actor_number   VARCHAR(30),                 -- staff / student number, for searching\n    category       VARCHAR(20)  NOT NULL\n        CHECK (category IN ('bookings', 'access', 'venues', 'rules')),\n    action         VARCHAR(100) NOT NULL,       -- e.g. \"Added a venue\"\n    target         VARCHAR(300) NOT NULL,       -- e.g. \"Lab 10-125\"\n    lab_id         BIGINT REFERENCES lab_booking_db.labs (lab_id) ON DELETE SET NULL,\n    details        TEXT[]       NOT NULL DEFAULT '{}'\n);\n\nCREATE INDEX IF NOT EXISTS ix_venue_activity_occurred_at\n    ON lab_booking_db.venue_activity (occurred_at DESC);\n\nCREATE INDEX IF NOT EXISTS ix_venue_activity_lab_id\n    ON lab_booking_db.venue_activity (lab_id);\n\nCOMMIT;",
+    "notes": {
+      "12": "New columns for the Add venue form",
+      "22": "Constraints are added only if they do not exist yet",
+      "38": "The Venue Activity log table",
+      "50": "A PostgreSQL text array: one entry per detail line"
+    }
+  },
+  "db-sql-identity": {
+    "repo": "ARMS.Backend",
+    "file": "docs/arms_database_full.sql",
+    "from": 117,
+    "language": "sql",
+    "code": "CREATE TABLE identity_db.role (\n    role_id SERIAL PRIMARY KEY,\n    name    VARCHAR(50) NOT NULL UNIQUE\n);\n\nCREATE TABLE identity_db.\"user\" (\n    user_id           SERIAL PRIMARY KEY,\n    full_name         VARCHAR(100) NOT NULL,\n    surname           VARCHAR(50)  NOT NULL,\n    email             VARCHAR(100) NOT NULL UNIQUE,\n    password_hash     TEXT         NOT NULL,\n    role_id           INT          NOT NULL REFERENCES identity_db.role(role_id),\n    registration_date DATE         NOT NULL DEFAULT CURRENT_DATE,\n    registered_at     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP\n);\n\nCREATE TABLE identity_db.student (\n    student_id        SERIAL PRIMARY KEY,\n    user_id           INT NOT NULL UNIQUE REFERENCES identity_db.\"user\"(user_id) ON DELETE CASCADE,\n    student_number    VARCHAR(20) NOT NULL UNIQUE,\n    contact_number    VARCHAR(20),\n    home_address      TEXT,\n    campus            VARCHAR(100),\n    registration_date DATE NOT NULL DEFAULT CURRENT_DATE\n);\n\nCREATE TABLE identity_db.lecturer (\n    lecturer_id          SERIAL PRIMARY KEY,\n    user_id              INT NOT NULL UNIQUE REFERENCES identity_db.\"user\"(user_id) ON DELETE CASCADE,\n    staff_number         VARCHAR(20) NOT NULL UNIQUE,\n    office_number        VARCHAR(50),\n    timetable_identifier VARCHAR(100) UNIQUE\n);\n\nCREATE TABLE identity_db.system_admin (\n    system_admin_id   SERIAL PRIMARY KEY,\n    user_id           INT NOT NULL UNIQUE REFERENCES identity_db.\"user\"(user_id) ON DELETE CASCADE,\n    employee_number   VARCHAR(20) NOT NULL UNIQUE,\n    technical_contact VARCHAR(100)\n);",
+    "notes": {
+      "122": "\"user\" is quoted because user is a reserved word in PostgreSQL",
+      "128": "A real foreign key: both tables are in identity_db",
+      "135": "Each profile table has one row per user (UNIQUE user_id)",
+      "148": "timetable_identifier: the lecturer’s name as the timetable spreadsheet writes it"
+    }
+  },
+  "db-support-staff": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Persistence/Context/ArmsDbContext.cs",
+    "from": 489,
+    "language": "csharp",
+    "code": "        // =====================================================\n        // SUPPORT STAFF (Lab Technicians / Security Officers)\n        // =====================================================\n\n        modelBuilder.Entity<SupportStaff>(entity =>\n        {\n            entity.ToTable(\"support_staff\", \"identity_db\");\n            entity.HasKey(x => x.support_staff_id);\n            entity.Property(x => x.support_staff_id).HasColumnName(\"support_staff_id\").ValueGeneratedOnAdd();\n            entity.Property(x => x.system_admin_id).HasColumnName(\"system_admin_id\").IsRequired();\n            entity.Property(x => x.full_names).HasColumnName(\"full_names\").HasMaxLength(100).IsRequired();\n            entity.Property(x => x.email).HasColumnName(\"email\").HasMaxLength(255).IsRequired();\n            entity.Property(x => x.emailed_for).HasColumnName(\"emailed_for\").HasMaxLength(255);\n            entity.Property(x => x.role).HasColumnName(\"role\").HasMaxLength(30).IsRequired();\n            entity.Property(x => x.campus).HasColumnName(\"campus\").HasMaxLength(100);\n            // Not columns: floor became emailed_for; buildings is read from emailed_for.\n            entity.Ignore(x => x.floor);\n            entity.Ignore(x => x.buildings);\n        });",
+    "notes": {
+      "495": "Lab technicians and security officers: contacts, not sign-in accounts",
+      "504": "Columns renamed by a script are ignored instead of mapped"
+    }
+  },
+  "db-sql-academic": {
+    "repo": "ARMS.Backend",
+    "file": "docs/arms_database_full.sql",
+    "from": 175,
+    "language": "sql",
+    "code": "CREATE TABLE academic_db.faculty (\n    faculty_id SERIAL PRIMARY KEY,\n    name       VARCHAR(200) NOT NULL UNIQUE,\n    code       VARCHAR(20) NOT NULL UNIQUE,\n    is_deleted BOOLEAN NOT NULL DEFAULT FALSE\n);\n\nCREATE TABLE academic_db.department (\n    department_id SERIAL PRIMARY KEY,\n    faculty_id    INT REFERENCES academic_db.faculty(faculty_id),\n    name          VARCHAR(200) NOT NULL UNIQUE,\n    is_deleted    BOOLEAN NOT NULL DEFAULT FALSE\n);\n\nCREATE TABLE academic_db.course (\n    course_id          SERIAL PRIMARY KEY,\n    department_id      INT NOT NULL REFERENCES academic_db.department(department_id),\n    name               VARCHAR(150) NOT NULL,\n    code               VARCHAR(20)  NOT NULL UNIQUE,\n    qualification_level VARCHAR(50),\n    nqf_level          VARCHAR(10),\n    is_deleted         BOOLEAN NOT NULL DEFAULT FALSE\n);\n\nCREATE TABLE academic_db.module (\n    module_id     SERIAL PRIMARY KEY,\n    course_id     INT NOT NULL REFERENCES academic_db.course(course_id),\n    name          VARCHAR(150) NOT NULL,\n    code          VARCHAR(20)  NOT NULL UNIQUE,\n    department_id INT,                       -- optional; not used by the app\n    is_deleted    BOOLEAN NOT NULL DEFAULT FALSE\n);\n\n-- Joins a lecturer (logical link -> identity_db.\"user\") to a module.\nCREATE TABLE academic_db.lecturer_module (\n    lecturer_module_id SERIAL PRIMARY KEY,\n    lecturer_user_id   INT NOT NULL,          -- logical link\n    module_id          INT NOT NULL REFERENCES academic_db.module(module_id),\n    office_number      VARCHAR(20)\n);",
+    "notes": {
+      "179": "Soft delete: rows are flagged, not removed, so old timetables still resolve",
+      "184": "faculty → department → course → module",
+      "211": "Logical link to identity_db.\"user\" (another schema, so no foreign key)"
+    }
+  },
+  "db-sql-groups": {
+    "repo": "ARMS.Backend",
+    "file": "docs/arms_database_full.sql",
+    "from": 216,
+    "language": "sql",
+    "code": "CREATE TABLE academic_db.\"group\" (\n    group_id           SERIAL PRIMARY KEY,\n    module_id          INT NOT NULL REFERENCES academic_db.module(module_id),\n    name               VARCHAR(50) NOT NULL,\n    total_students     INT NOT NULL DEFAULT 0,\n    is_assigned        BOOLEAN NOT NULL DEFAULT FALSE,\n    lecturer_module_id INT REFERENCES academic_db.lecturer_module(lecturer_module_id),\n    is_deleted         BOOLEAN NOT NULL DEFAULT FALSE,\n    UNIQUE (module_id, name)\n);\n\n-- Which modules a student takes (populated already in your environment).\nCREATE TABLE academic_db.student_enrollment (\n    student_enrollment_id SERIAL PRIMARY KEY,\n    student_user_id       INT NOT NULL,       -- logical link\n    module_id             INT NOT NULL REFERENCES academic_db.module(module_id),\n    group_id              INT REFERENCES academic_db.\"group\"(group_id),\n    semester              INT NOT NULL CHECK (semester IN (1, 2)),\n    academic_year         INT NOT NULL CHECK (academic_year >= 2000),\n    UNIQUE (student_user_id, module_id, semester, academic_year)\n);\n\n-- Per-student group allocation used to build the personal class timetable.\nCREATE TABLE academic_db.student_group (\n    student_group_id SERIAL PRIMARY KEY,\n    student_id       INT NOT NULL,            -- logical link -> identity_db.student.student_id\n    module_id        INT NOT NULL,\n    name             VARCHAR(50) NOT NULL,\n    group_id         INT REFERENCES academic_db.\"group\"(group_id),\n    is_active        BOOLEAN NOT NULL DEFAULT FALSE\n);",
+    "notes": {
+      "222": "Points at the lecturer teaching this group",
+      "224": "A module cannot have two groups with the same name",
+      "235": "A student takes a module once per semester and year",
+      "239": "student_group is what builds each student’s personal timetable"
+    }
+  },
+  "db-managed-timetable": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Persistence/Configurations/ManagedTimetableConfiguration.cs",
+    "from": 7,
+    "language": "csharp",
+    "code": "public class ManagedTimetableConfiguration : IEntityTypeConfiguration<ManagedTimetable>\n{\n    public void Configure(EntityTypeBuilder<ManagedTimetable> builder)\n    {\n        builder.ToTable(\"managed_timetable\", \"timetable_db\");\n\n        builder.HasKey(e => e.managed_timetable_id);\n\n        builder.Property(e => e.managed_timetable_id)\n               .HasColumnName(\"managed_timetable_id\")\n               .ValueGeneratedOnAdd();\n\n        builder.Property(e => e.name)\n               .HasColumnName(\"name\")\n               .HasMaxLength(200)\n               .IsRequired();\n\n        builder.Property(e => e.type)\n               .HasColumnName(\"type\")\n               .HasMaxLength(30)\n               .IsRequired();\n\n        builder.Property(e => e.academic_year)\n               .HasColumnName(\"academic_year\");\n\n        builder.Property(e => e.academic_period)\n               .HasColumnName(\"academic_period\")\n               .HasMaxLength(50);\n\n        builder.Property(e => e.faculty_id)\n               .HasColumnName(\"faculty_id\");\n\n        builder.Property(e => e.status)\n               .HasColumnName(\"status\")\n               .HasMaxLength(20);\n\n        builder.Property(e => e.uploaded_by)\n               .HasColumnName(\"uploaded_by\");\n\n        builder.Property(e => e.uploaded_at)\n               .HasColumnName(\"uploaded_at\");\n\n        builder.Property(e => e.updated_at)\n               .HasColumnName(\"updated_at\");\n    }\n}",
+    "notes": {
+      "11": "One row per uploaded spreadsheet (the Timetable Management list)",
+      "24": "Class Timetable, Semester Test or Examination",
+      "39": "Pending → Published (live) → Inactive"
+    }
+  },
+  "db-class-entry": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Persistence/Configurations/ClassTimetableEntryConfiguration.cs",
+    "from": 7,
+    "language": "csharp",
+    "code": "public class ClassTimetableEntryConfiguration : IEntityTypeConfiguration<ClassTimetableEntry>\n{\n    public void Configure(EntityTypeBuilder<ClassTimetableEntry> builder)\n    {\n        builder.ToTable(\"class_timetable_entry\", \"timetable_db\");\n\n        builder.HasKey(e => e.class_timetable_id);\n\n        builder.Property(e => e.class_timetable_id)\n               .HasColumnName(\"class_timetable_id\")\n               .ValueGeneratedOnAdd();\n\n        // Logical link column (no navigation, no FK - different microservice).\n        builder.Property(e => e.group_id)\n               .HasColumnName(\"group_id\");\n\n        builder.Property(e => e.lecturer_user_id)\n               .HasColumnName(\"lecturer_user_id\");\n\n        builder.Property(e => e.academic_week)\n               .HasColumnName(\"academic_week\");\n\n        // The database column is spelled \"day_of_the_week\".\n        builder.Property(e => e.day_of_week)\n               .HasColumnName(\"day_of_the_week\");\n\n        builder.Property(e => e.start_time).HasColumnName(\"start_time\");\n        builder.Property(e => e.end_time).HasColumnName(\"end_time\");\n        builder.Property(e => e.venue).HasColumnName(\"venue\");\n        builder.Property(e => e.slot).HasColumnName(\"slot\");\n        builder.Property(e => e.status).HasColumnName(\"status\");\n        builder.Property(e => e.created_at).HasColumnName(\"created_at\");\n        builder.Property(e => e.managed_timetable_id).HasColumnName(\"managed_timetable_id\");\n\n        // Transient display fields - hydrated in code, never read/written by EF.\n        builder.Ignore(e => e.module_id);\n        builder.Ignore(e => e.group_name);\n    }\n}",
+    "notes": {
+      "20": "group_id is a logical link to academic_db.\"group\"",
+      "30": "A C# name mapped to a differently spelled column",
+      "39": "Ties each class to the uploaded timetable it came from",
+      "42": "Filled in code for display; EF never reads or writes them"
+    }
+  },
+  "db-sql-tests": {
+    "repo": "ARMS.Backend",
+    "file": "docs/arms_database_full.sql",
+    "from": 277,
+    "language": "sql",
+    "code": "CREATE TABLE timetable_db.test_timetable_entry (\n    test_timetable_id SERIAL PRIMARY KEY,\n    module_id         INT NOT NULL,           -- logical link\n    lecturer_user_id  INT,                    -- logical link (nullable)\n    test_type         VARCHAR(50) NOT NULL,   -- \"Semester Test\" or \"Exam\" (selects the upload lane)\n    test_date         DATE NOT NULL,\n    day_of_the_week   VARCHAR(20) NOT NULL,\n    start_time        TIME NOT NULL,\n    end_time          TIME NOT NULL,\n    venue             VARCHAR(100) NOT NULL,\n    session           VARCHAR(50),             -- \"First Session\" / \"Second Session\"\n    session_type      VARCHAR(50),             -- \"Practical\" / \"Theory\"\n    CHECK (end_time > start_time)\n);",
+    "notes": {
+      "281": "Selects the upload lane: Semester Test or Exam",
+      "289": "The database itself refuses a session that ends before it starts"
+    }
+  },
+  "db-planner-entity": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Domain/Entities/AcademicPlanner.cs",
+    "from": 5,
+    "language": "csharp",
+    "code": "public class AcademicPlanner\n{\n    [Key]\n    public int planner_id { get; set; }\n\n    [Required]\n    [MaxLength(255)]\n    public string file_name { get; set; } = string.Empty;\n\n    [Required]\n    [MaxLength(500)]\n    public string stored_file_name { get; set; } = string.Empty;\n\n    [Required]\n    [MaxLength(1000)]\n    public string file_path { get; set; } = string.Empty;\n\n    [Required]\n    [MaxLength(100)]\n    public string content_type { get; set; } = string.Empty;\n\n    public long file_size { get; set; }\n\n    [MaxLength(64)]\n    public string file_hash { get; set; } = string.Empty;\n\n    public bool is_current { get; set; }\n\n    public bool is_archived { get; set; }\n\n    public int uploaded_by { get; set; }\n\n    public DateTime uploaded_at { get; set; }\n\n    public DateTime? archived_at { get; set; }\n}",
+    "notes": {
+      "16": "The uploaded file is kept on disk under a generated name",
+      "29": "SHA-256 of the file: uploading the same file twice is detected",
+      "31": "Only one planner is current; older ones are archived"
+    }
+  },
+  "db-calendar-config": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Persistence/Context/ArmsDbContext.cs",
+    "from": 141,
+    "language": "csharp",
+    "code": "        // =====================================================\n        // ACADEMIC CALENDAR EVENT\n        // =====================================================\n\n        modelBuilder.Entity<AcademicCalendarEvent>(entity =>\n        {\n            entity.HasKey(x => x.calendar_event_id);\n\n            entity.Property(x => x.event_title)\n                .IsRequired()\n                .HasMaxLength(500);\n\n            entity.Property(x => x.event_description)\n                .HasMaxLength(2000);\n\n            entity.Property(x => x.category)\n                .HasMaxLength(255);\n\n            entity.Property(x => x.source_sheet)\n                .IsRequired()\n                .HasMaxLength(255);\n\n            entity.Property(x => x.source_table)\n                .IsRequired()\n                .HasMaxLength(255);\n\n            entity.Property(x => x.event_hash)\n                .IsRequired()\n                .HasMaxLength(64);\n\n            entity.HasIndex(x => new\n            {\n                x.planner_id,\n                x.event_hash\n            }).IsUnique();\n\n            entity.HasOne(x => x.planner)\n                .WithMany()\n                .HasForeignKey(x => x.planner_id)\n                .OnDelete(DeleteBehavior.Cascade);\n        });",
+    "notes": {
+      "167": "A hash of each event’s details…",
+      "171": "…unique per planner, so re-importing the file adds no duplicates",
+      "180": "Deleting a planner deletes its events"
+    }
+  },
+  "db-lab-config": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Persistence/Context/ArmsDbContext.cs",
+    "from": 183,
+    "language": "csharp",
+    "code": "        // =====================================================\n        // LAB\n        // =====================================================\n\n        // The lab tables live in the lab_booking_db schema (created by the\n        // project SQL script, not by EF migrations).\n        modelBuilder.Entity<Lab>(entity =>\n        {\n            entity.ToTable(\"labs\", \"lab_booking_db\");\n\n            entity.HasKey(x => x.lab_id);\n\n            entity.Property(x => x.lab_id)\n                .HasColumnName(\"lab_id\")\n                .ValueGeneratedOnAdd();\n\n            entity.Property(x => x.public_id)\n                .HasColumnName(\"public_id\")\n                .IsRequired();\n\n            entity.Property(x => x.name)\n                .HasColumnName(\"name\")\n                .HasMaxLength(50)\n                .IsRequired();\n\n            entity.Property(x => x.campus)\n                .HasColumnName(\"campus\")\n                .HasMaxLength(50)\n                .IsRequired();\n\n            entity.Property(x => x.location)\n                .HasColumnName(\"location\")\n                .HasMaxLength(50);\n\n            // Nullable: seats not counted yet (docs/venue_management_2026-11-19.sql).\n            entity.Property(x => x.capacity)\n                .HasColumnName(\"capacity\");\n\n            entity.Property(x => x.floor)\n                .HasColumnName(\"floor\")\n                .HasMaxLength(20);\n\n            entity.Property(x => x.accessibility)\n                .HasColumnName(\"accessibility\")\n                .HasMaxLength(200);\n\n            entity.Property(x => x.opens_hour)\n                .HasColumnName(\"opens_hour\");\n\n            entity.Property(x => x.closes_hour)\n                .HasColumnName(\"closes_hour\");\n\n            entity.Property(x => x.is_lab)\n                .HasColumnName(\"is_lab\")\n                .IsRequired();\n\n            entity.Property(x => x.is_active)\n                .HasColumnName(\"is_active\")\n                .IsRequired();\n\n            entity.Property(x => x.is_available)\n                .HasColumnName(\"is_available\")\n                .IsRequired();\n\n            // Computed from is_active + is_available, not a column.\n            entity.Ignore(x => x.IsBookable);\n\n            entity.HasIndex(x => x.public_id)\n                .IsUnique();\n        });",
+    "notes": {
+      "191": "ToTable(name, schema): lab_booking_db.labs",
+      "199": "public_id (a uuid) is what the API exposes; lab_id stays internal",
+      "243": "is_active = false hides a venue; is_available = false blocks bookings for a while",
+      "248": "A C# property worked out from two columns; Ignore keeps EF from looking for a column"
+    }
+  },
+  "db-booking-config": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Persistence/Context/ArmsDbContext.cs",
+    "from": 254,
+    "language": "csharp",
+    "code": "        // =====================================================\n        // LAB BOOKING\n        // =====================================================\n\n        modelBuilder.Entity<LabBooking>(entity =>\n        {\n            entity.ToTable(\"lab_bookings\", \"lab_booking_db\");\n\n            entity.HasKey(x => x.booking_id);\n\n            // GENERATED ALWAYS AS IDENTITY in the database.\n            entity.Property(x => x.booking_id)\n                .HasColumnName(\"booking_id\")\n                .ValueGeneratedOnAdd();\n\n            entity.Property(x => x.public_id)\n                .HasColumnName(\"public_id\")\n                .IsRequired();\n\n            entity.Property(x => x.lab_id)\n                .HasColumnName(\"lab_id\")\n                .IsRequired();\n\n            entity.Property(x => x.booked_by_user_id)\n                .HasColumnName(\"booked_by_user_id\")\n                .IsRequired();\n\n            entity.Property(x => x.module_id)\n                .HasColumnName(\"module_id\");\n\n            entity.Property(x => x.purpose)\n                .HasColumnName(\"purpose\")\n                .HasMaxLength(255)\n                .IsRequired();\n\n            entity.Property(x => x.start_at)\n                .HasColumnName(\"start_at\")\n                .IsRequired();\n\n            entity.Property(x => x.end_at)\n                .HasColumnName(\"end_at\")\n                .IsRequired();\n\n            entity.Property(x => x.status)\n                .HasColumnName(\"status\")\n                .HasMaxLength(50)\n                .IsRequired();\n\n            entity.Property(x => x.created_at)\n                .HasColumnName(\"created_at\")\n                .IsRequired();\n\n            entity.Property(x => x.booking_type)\n                .HasColumnName(\"booking_type\")\n                .HasMaxLength(50)\n                .IsRequired();\n\n            entity.Property(x => x.has_internet)\n                .HasColumnName(\"has_internet\")\n                .IsRequired();\n\n            // Approval (docs/booking_approval_2026-11-19.sql).\n            entity.Property(x => x.reviewed_by_user_id).HasColumnName(\"reviewed_by_user_id\");\n            entity.Property(x => x.reviewed_at).HasColumnName(\"reviewed_at\");\n            entity.Property(x => x.review_note).HasColumnName(\"review_note\").HasMaxLength(500);\n            entity.Property(x => x.original_lab_id).HasColumnName(\"original_lab_id\");\n\n            entity.HasIndex(x => x.public_id)\n                .IsUnique();\n\n            entity.HasIndex(x => new\n            {\n                x.lab_id,\n                x.start_at\n            });\n\n            entity.HasOne<Lab>()\n                .WithMany()\n                .HasForeignKey(x => x.lab_id)\n                .OnDelete(DeleteBehavior.Restrict);\n        });",
+    "notes": {
+      "264": "GENERATED ALWAYS AS IDENTITY: PostgreSQL makes the id",
+      "297": "PENDING, APPROVED, REJECTED, CANCELLED…",
+      "315": "Approval columns, added by docs/booking_approval_2026-11-19.sql",
+      "324": "Index for “bookings of this venue from this time”",
+      "333": "Restrict: a venue with bookings cannot be deleted"
+    }
+  },
+  "db-rules-config": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Persistence/Context/ArmsDbContext.cs",
+    "from": 509,
+    "language": "csharp",
+    "code": "        // =====================================================\n        // BOOKING RULES PER BOOKER TYPE (Venue Management > Booking rules)\n        // =====================================================\n\n        modelBuilder.Entity<BookingTypeRule>(entity =>\n        {\n            entity.ToTable(\"booking_type_rules\", \"lab_booking_db\");\n            entity.HasKey(x => x.booker_type);\n            entity.Property(x => x.booker_type).HasColumnName(\"booker_type\").HasMaxLength(10).ValueGeneratedNever();\n            entity.Property(x => x.max_active).HasColumnName(\"max_active\");\n            entity.Property(x => x.max_periods_per_day).HasColumnName(\"max_periods_per_day\");\n            entity.Property(x => x.max_after_hours_hours).HasColumnName(\"max_after_hours_hours\");\n            entity.Property(x => x.max_days_ahead).HasColumnName(\"max_days_ahead\");\n            entity.Property(x => x.cancel_cutoff_hours).HasColumnName(\"cancel_cutoff_hours\");\n            entity.Property(x => x.reschedule_cutoff_hours).HasColumnName(\"reschedule_cutoff_hours\");\n            entity.Property(x => x.updated_at).HasColumnName(\"updated_at\");\n            entity.Property(x => x.updated_by_user_id).HasColumnName(\"updated_by_user_id\");\n        });\n\n        // =====================================================\n        // BOOKING SETTINGS (one row: the admin's daily slot limit)\n        // =====================================================\n\n        modelBuilder.Entity<BookingSettings>(entity =>\n        {\n            entity.ToTable(\"booking_settings\", \"lab_booking_db\");\n            entity.HasKey(x => x.setting_id);\n            entity.Property(x => x.setting_id).HasColumnName(\"setting_id\").ValueGeneratedNever();\n            entity.Property(x => x.max_periods_per_day).HasColumnName(\"max_periods_per_day\");\n            entity.Property(x => x.max_periods_per_booking).HasColumnName(\"max_periods_per_booking\");\n            entity.Property(x => x.updated_at).HasColumnName(\"updated_at\");\n            entity.Property(x => x.updated_by_user_id).HasColumnName(\"updated_by_user_id\");\n        });",
+    "notes": {
+      "516": "One row per booker type: lecturer, tutor, mentor, student",
+      "518": "NULL means “No limit”",
+      "532": "A single-row table: setting_id is always 1"
+    }
+  },
+  "db-access-config": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Persistence/Context/ArmsDbContext.cs",
+    "from": 379,
+    "language": "csharp",
+    "code": "        // =====================================================\n        // LAB ACCESS REQUESTS (mapped to the live lab_booking_db tables;\n        // ids are GENERATED ALWAYS identity columns, links to other\n        // services are uuids - see LabAccessIds)\n        // =====================================================\n\n        modelBuilder.Entity<LabAccessRequest>(entity =>\n        {\n            entity.ToTable(\"lab_access_request\", \"lab_booking_db\");\n            entity.HasKey(x => x.request_id);\n            entity.Property(x => x.request_id).HasColumnName(\"request_id\").ValueGeneratedOnAdd();\n            entity.Property(x => x.public_id).HasColumnName(\"public_id\");\n            entity.Property(x => x.requested_by_public_id).HasColumnName(\"requested_by_public_id\");\n            entity.Property(x => x.module_public_id).HasColumnName(\"module_public_id\");\n            entity.Property(x => x.access_scope).HasColumnName(\"access_scope\").HasMaxLength(20);\n            entity.Property(x => x.student_count).HasColumnName(\"student_count\");\n            entity.Property(x => x.period_type).HasColumnName(\"period_type\").HasMaxLength(20);\n            entity.Property(x => x.start_date).HasColumnName(\"start_date\");\n            entity.Property(x => x.end_date).HasColumnName(\"end_date\");\n            entity.Property(x => x.start_at).HasColumnName(\"start_at\");\n            entity.Property(x => x.end_at).HasColumnName(\"end_at\");\n            entity.Property(x => x.reason).HasColumnName(\"reason\");\n            entity.Property(x => x.status).HasColumnName(\"status\").HasMaxLength(20);\n            entity.Property(x => x.created_at).HasColumnName(\"created_at\");\n            entity.Property(x => x.updated_at).HasColumnName(\"updated_at\");\n            entity.Property(x => x.update_at).HasColumnName(\"update_at\");\n            entity.Property(x => x.requested_at).HasColumnName(\"requested_at\");\n            entity.Property(x => x.reviewed_at).HasColumnName(\"reviewed_at\");\n            entity.Property(x => x.reviewed_by_admin_user_id).HasColumnName(\"reviewed_by_admin_user_id\");\n            entity.Property(x => x.rejection_reason).HasColumnName(\"rejection_reason\");\n\n            entity.HasMany(x => x.Labs)\n                .WithOne(x => x.Request)\n                .HasForeignKey(x => x.request_id)\n                .OnDelete(DeleteBehavior.Cascade);\n\n            entity.HasMany(x => x.Students)\n                .WithOne(x => x.Request)\n                .HasForeignKey(x => x.request_id)\n                .OnDelete(DeleteBehavior.Cascade);\n\n            entity.HasMany(x => x.Responses)\n                .WithOne(x => x.Request)\n                .HasForeignKey(x => x.request_id)\n                .OnDelete(DeleteBehavior.Cascade);\n        });\n\n        modelBuilder.Entity<LabAccessRequestLab>(entity =>\n        {\n            entity.ToTable(\"lab_access_request_lab\", \"lab_booking_db\");\n            entity.HasKey(x => new { x.request_id, x.lab_id });\n            entity.Property(x => x.request_id).HasColumnName(\"request_id\");\n            entity.Property(x => x.lab_id).HasColumnName(\"lab_id\");\n        });",
+    "notes": {
+      "391": "Links to other areas are uuids (public_id), not ints",
+      "410": "A request owns its labs, students and admin responses; deleting it deletes them",
+      "429": "Composite key: one row per request and lab"
+    }
+  },
+  "db-sql-support": {
+    "repo": "ARMS.Backend",
+    "file": "docs/arms_database_full.sql",
+    "from": 297,
+    "language": "sql",
+    "code": "CREATE TABLE system_db.support_ticket (\n    support_id     SERIAL PRIMARY KEY,\n    user_id        INT NOT NULL,              -- logical link\n    category       VARCHAR(50),\n    subject        VARCHAR(200),\n    message        TEXT NOT NULL,\n    admin_feedback TEXT,\n    is_resolved    BOOLEAN DEFAULT FALSE,\n    created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n);",
+    "notes": {
+      "299": "Logical link to the sender in identity_db.\"user\"",
+      "303": "The admin’s reply, shown to the sender"
+    }
+  },
+  "db-sql-notifications": {
+    "repo": "ARMS.Backend",
+    "file": "docs/arms_database_full.sql",
+    "from": 318,
+    "language": "sql",
+    "code": "CREATE TABLE system_db.notification (\n    notification_id       SERIAL PRIMARY KEY,\n    notification_type     VARCHAR(50) NOT NULL, -- {Academic, Administrative, Calendar, Support, Admin}\n    title                 VARCHAR(150) NOT NULL,\n    message               TEXT NOT NULL,\n    class_timetable_id    INT, -- Logical Link\n    test_timetable_id     INT,  -- Logical Link\n    support_id            INT,         -- Link to feedback\n    contact_us_message_id INT,\n    created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n);\n\nCREATE TABLE system_db.user_notification (\n    user_notification_id SERIAL PRIMARY KEY,\n    notification_id INT REFERENCES system_db.notification(notification_id) ON DELETE CASCADE,\n    user_id         INT NOT NULL, -- Logical Link (NO UNIQUE CONSTRAINT HERE)\n    is_read         BOOLEAN DEFAULT FALSE\n);",
+    "notes": {
+      "320": "Academic, Administrative, Calendar, Support or Admin",
+      "323": "Optional links to what the notification is about",
+      "330": "One row per recipient, with their own read flag"
+    }
+  },
+  "db-notify-config": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Persistence/Configurations/NotificationConfiguration.cs",
+    "from": 41,
+    "language": "csharp",
+    "code": "public class UserNotificationConfiguration : IEntityTypeConfiguration<UserNotification>\n{\n    public void Configure(EntityTypeBuilder<UserNotification> builder)\n    {\n        builder.ToTable(\"user_notification\", \"system_db\");\n\n        builder.HasKey(u => u.user_notification_id);\n\n        builder.Property(u => u.user_notification_id)\n            .ValueGeneratedOnAdd();\n\n        builder.Property(u => u.user_id)\n            .IsRequired();\n\n        builder.Property(u => u.is_read)\n            .IsRequired();\n\n        // NOTE: no unique constraint on (notification_id, user_id) - the schema\n        // deliberately allows a user to hold the same notification more than once.\n        builder.HasIndex(u => new { u.user_id, u.is_read });\n        builder.HasIndex(u => u.notification_id);\n    }\n}",
+    "notes": {
+      "58": "No unique (notification, user) pair, on purpose",
+      "60": "Index for the bell’s “unread for this user” query"
+    }
+  },
   "ad-dash-page": {
     "repo": "ARMS.Frontend",
     "file": "src/pages/system-admin/SystemAdminDashboard.jsx",
@@ -2989,6 +3387,193 @@
       "85": "Arrow keys move between the tiles, like native radio buttons",
       "100": "The three tiles form one radio group for screen readers",
       "112": "Only the selected tile is in the Tab order (roving tabindex)"
+    }
+  },
+  "in-env-example": {
+    "repo": "ARMS.Frontend",
+    "file": ".env.example",
+    "from": 1,
+    "language": "yaml",
+    "code": "# Base URL for the ARMS backend API (see src/lib/api.js). Include the /api\n# prefix — service calls build paths like `${VITE_API_BASE_URL}/auth/student-login`.\n# Local backend:\n# VITE_API_BASE_URL=http://localhost:5000/api\n# Hosted backend (Render):\nVITE_API_BASE_URL=https://arms-backend-t2p1.onrender.com/api",
+    "notes": {
+      "2": "Include /api: services add paths such as /auth/login to it",
+      "6": "Copy this file to .env and pick one of the two lines"
+    }
+  },
+  "in-render": {
+    "repo": "ARMS.Frontend",
+    "file": "render.yaml",
+    "from": 10,
+    "language": "yaml",
+    "code": "services:\n  - type: web\n    runtime: static\n    name: arms-frontend\n    buildCommand: npm ci && npm run build\n    staticPublishPath: ./dist\n    routes:\n      - type: rewrite\n        source: /*\n        destination: /index.html",
+    "notes": {
+      "14": "Render installs and builds on every push, then serves dist/ as static files",
+      "17": "Every path returns index.html, so refreshing /student/dashboard still works"
+    }
+  },
+  "in-cors": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Program.cs",
+    "from": 61,
+    "language": "csharp",
+    "code": "const string ArmsCorsPolicy = \"ArmsCors\";\n\nbuilder.Services.AddCors(options =>\n{\n    options.AddPolicy(ArmsCorsPolicy, policy =>\n    {\n        var allowedOrigins = builder.Configuration\n            .GetSection(\"Cors:AllowedOrigins\")\n            .Get<string[]>() ?? [];\n\n        policy.WithOrigins(allowedOrigins)\n              .AllowAnyHeader()\n              .AllowAnyMethod()\n              .AllowCredentials()\n              // Lets the frontend read the server's file name on downloads\n              // (timetable PDF/Word/Excel exports).\n              .WithExposedHeaders(\"Content-Disposition\");\n    });\n});",
+    "notes": {
+      "67": "The allowed origins are read from configuration, so each environment lists its own frontend",
+      "74": "Lets the browser send credentials to the API",
+      "77": "Without this the frontend cannot read the download file name"
+    }
+  },
+  "in-user-id": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/LabAccessRequestsController.cs",
+    "from": 144,
+    "language": "csharp",
+    "code": "    private bool TryGetUserId(out int userId)\n    {\n        var value = User.FindFirst(ClaimTypes.NameIdentifier)?.Value\n            ?? User.FindFirst(\"sub\")?.Value\n            ?? User.FindFirst(\"user_id\")?.Value;\n\n        return int.TryParse(value, out userId) && userId > 0;\n    }",
+    "notes": {
+      "146": "The user id comes from the verified JWT, never from the request body"
+    }
+  },
+  "in-error-map": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/LabAccessRequestsController.cs",
+    "from": 135,
+    "language": "csharp",
+    "code": "    internal static IActionResult? Map(Exception ex) => ex switch\n    {\n        ArgumentException => new BadRequestObjectResult(new { message = ex.Message }),\n        UnauthorizedAccessException => new ObjectResult(new { message = ex.Message }) { StatusCode = StatusCodes.Status403Forbidden },\n        KeyNotFoundException => new NotFoundObjectResult(new { message = ex.Message }),\n        InvalidOperationException => new ConflictObjectResult(new { message = ex.Message }),\n        _ => null\n    };",
+    "notes": {
+      "137": "Service rule broken (bad dates, no venues…) → 400",
+      "138": "Not your request → 403",
+      "140": "Already decided, venue taken… → 409",
+      "141": "Anything else is not mapped and becomes a 500"
+    }
+  },
+  "in-booking-errors": {
+    "repo": "ARMS.Frontend",
+    "file": "src/services/venues/labBookingService.js",
+    "from": 65,
+    "language": "jsx",
+    "code": "// ---------- errors ----------\n\n/** A readable message from a failed request (the backend answers { message }). */\nfunction toError(error, fallback) {\n  const status = error?.response?.status\n  const data = error?.response?.data\n  const validation = data?.errors && Object.values(data.errors).flat().filter(Boolean)[0]\n  const message = data?.message || validation || data?.title\n  const wrapped = new Error(message || fallback)\n  wrapped.status = status\n  return wrapped\n}\n\nasync function request(call, fallback) {\n  try {\n    const { data } = await call()\n    return data\n  } catch (error) {\n    throw toError(error, fallback)\n  }\n}",
+    "notes": {
+      "71": "ASP.NET model-validation errors arrive as { errors: { field: [...] } }",
+      "72": "The backend’s own { message } wins, then validation, then the generic title",
+      "74": "The status is kept, so a page can treat 409 (taken) differently"
+    }
+  },
+  "in-upload-errors": {
+    "repo": "ARMS.Frontend",
+    "file": "src/services/timetableManagementService.js",
+    "from": 96,
+    "language": "jsx",
+    "code": "/** Pulls a readable message out of a string, { message }, or ASP.NET { title, errors } error body. */\nconst uploadErrorMessage = (error, fallback) => {\n  // No response at all: the request timed out (the api client gives up after\n  // 100s) or the server couldn't be reached. The server may still have\n  // created the timetable, so say so rather than a bare \"failed\".\n  if (!error?.response) {\n    if (error?.code === 'ECONNABORTED' || error?.code === 'ETIMEDOUT') {\n      return 'The server took too long to respond. The timetable may still have been created — check the list, and try again if it is not there.'\n    }\n    if (error?.code === 'ERR_NETWORK') {\n      return 'Could not reach the server. Check your connection and try again.'\n    }\n  }\n  const data = error?.response?.data\n  if (typeof data === 'string' && data.trim()) return data\n  const validation = data?.errors ? Object.values(data.errors).flat().filter(Boolean).join(' ') : ''\n  const message = data?.message || validation || data?.title\n  // 500s come back as { message, error } — the detail is in `error`.\n  if (message && typeof data?.error === 'string') return `${message} ${data.error}`\n  return message || fallback\n}",
+    "notes": {
+      "101": "No response at all: a timeout or no network, not an error from the API",
+      "110": "Some endpoints answer with plain text",
+      "114": "500s carry the detail in `error`; it is shown after the message"
+    }
+  },
+  "in-upload-service": {
+    "repo": "ARMS.Frontend",
+    "file": "src/services/timetableManagementService.js",
+    "from": 129,
+    "language": "jsx",
+    "code": "export const uploadManagedTimetable = async ({ file, name, type, year, period, facultyId }) => {\n  const isClass = type === 'Class Timetable'\n  const formData = new FormData()\n  formData.append('file', file)\n  formData.append('name', name)\n  formData.append('academicYear', String(Number(year)))\n  formData.append('academicPeriod', period)\n  formData.append('facultyId', String(Number(facultyId)))\n\n  try {\n    // The api instance defaults to application/json, which makes Axios\n    // serialize FormData into JSON — override so it's sent as multipart.\n    await api.post(\n      isClass ? ENDPOINTS.TIMETABLE_MANAGEMENT.UPLOAD_CLASS : ENDPOINTS.TIMETABLE_MANAGEMENT.UPLOAD_TEST,\n      formData,\n      {\n        headers: { 'Content-Type': 'multipart/form-data' },\n        params: isClass ? undefined : { testType: TEST_TYPE_BY_TIMETABLE_TYPE[type] ?? 'Semester Test' },\n      },\n    )\n  } catch (error) {\n    console.error('Failed to upload timetable', error?.response?.status, error?.response?.data ?? error)\n    throw new Error(uploadErrorMessage(error, 'Timetable upload unsuccessful. Please try again.'))\n  }\n}",
+    "notes": {
+      "131": "The spreadsheet and its details travel together as multipart form data",
+      "142": "Class timetables and test / exam timetables use different endpoints",
+      "145": "Overrides the client’s JSON default for this one request"
+    }
+  },
+  "in-overlap-409": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.Infrastructure/Services/LabBookingService.cs",
+    "from": 1519,
+    "language": "csharp",
+    "code": "    /// <summary>\n    /// Saves, turning the DB overlap constraint (someone else booked the same\n    /// venue a moment earlier) into the same 409 the pre-check gives.\n    /// </summary>\n    private async Task SaveBookingChangesAsync()\n    {\n        try\n        {\n            await _context.SaveChangesAsync();\n        }\n        catch (DbUpdateException ex) when (\n            ex.InnerException is PostgresException pg &&\n            pg.SqlState == PostgresErrorCodes.ExclusionViolation)\n        {\n            throw new InvalidOperationException(\n                \"This venue has just been booked by someone else for that time. Please pick another period.\");\n        }",
+    "notes": {
+      "1529": "The insert broke the ex_lab_bookings_no_overlap constraint in PostgreSQL…",
+      "1533": "…so it becomes the same 409 message the earlier check gives"
+    }
+  },
+  "in-book-create": {
+    "repo": "ARMS.Frontend",
+    "file": "src/services/venues/labBookingService.js",
+    "from": 333,
+    "language": "jsx",
+    "code": "export async function createBooking(booking) {\n  const { venueId, date, start, end, purpose, isOpenLab = false, hasInternet } = booking\n  // Dev sign-ins have no backend token: they book on the sample data in this browser.\n  if (isDevSession()) return devStubs.createBooking(booking)\n  const data = await request(\n    () =>\n      api.post(ENDPOINTS.LAB_BOOKINGS.BOOK, {\n        lab_id: Number(venueId),\n        booking_date: date,\n        start_time: start,\n        end_time: end,\n        is_open_lab: Boolean(isOpenLab),\n        purpose: String(purpose ?? '').trim(),\n        // Lecturer-only \"Has internet\" option (labs); left out otherwise.\n        ...(typeof hasInternet === 'boolean' ? { has_internet: hasInternet } : {}),\n      }),\n    \"The booking couldn't be made. Please try again.\",\n  )\n  return toBooking(data.bookingDetails)\n}",
+    "notes": {
+      "336": "Dev sign-in: books on sample data in the browser, the API is not called",
+      "339": "The body uses the backend’s snake_case names",
+      "351": "The saved booking comes back and is reshaped for the UI"
+    }
+  },
+  "in-access-body": {
+    "repo": "ARMS.Frontend",
+    "file": "src/services/venues/labAccessService.js",
+    "from": 222,
+    "language": "jsx",
+    "code": "function toCreateBody({ moduleId, scope, selectedStudentIds, venueIds, period, from, until, reason }) {\n  return {\n    module_id: moduleId,\n    access_scope: scope === 'selected' ? 'SELECTED_STUDENTS' : 'ALL_STUDENTS',\n    student_ids: scope === 'selected' ? selectedStudentIds : null,\n    lab_ids: venueIds,\n    period_type: PERIOD_TYPES[period] ?? 'CUSTOM',\n    start_date: from,\n    end_date: until,\n    reason: reason?.trim() ?? '',\n  }\n}\n\n/** Sends a request: { moduleId, moduleCode, scope, selectedStudentIds, venueIds, period, from, until, reason }. */\nexport async function createAccessRequest(user, form) {\n  if (isDevSession()) return stubs.createAccessRequest(user, form)\n  if (!form.moduleId) throw new Error('Pick one of your modules.')\n  const data = await request(() => api.post(ENDPOINTS.LAB_ACCESS.CREATE, toCreateBody(form)), \"Couldn't send the request.\")\n  return data?.request ? toRequest(data.request) : null\n}",
+    "notes": {
+      "225": "Form choices become the values the API expects (ALL_STUDENTS, CUSTOM…)",
+      "239": "POST /api/lab-access-requests"
+    }
+  },
+  "in-access-create": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/LabAccessRequestsController.cs",
+    "from": 42,
+    "language": "csharp",
+    "code": "    /// <summary>\n    /// Sends a request. access_scope: ALL_STUDENTS (Every student) or\n    /// SELECTED_STUDENTS (Only selected students, with student_ids).\n    /// period_type: CURRENT_SEMESTER, NEXT_SEMESTER, YEAR or CUSTOM.\n    /// The system admins and you are notified in-app.\n    /// </summary>\n    [HttpPost]\n    [ProducesResponseType(typeof(LabAccessRequestResponse), StatusCodes.Status201Created)]\n    [ProducesResponseType(StatusCodes.Status400BadRequest)]\n    [ProducesResponseType(StatusCodes.Status403Forbidden)]\n    [ProducesResponseType(StatusCodes.Status409Conflict)]\n    public async Task<IActionResult> Create(\n        [FromBody] CreateLabAccessRequestDto request,\n        CancellationToken cancellationToken)\n    {\n        if (!TryGetUserId(out var userId))\n            return Unauthorized(new { message = \"Invalid user identity.\" });\n\n        try\n        {\n            var created = await _service.CreateRequestAsync(request, userId, cancellationToken);\n\n            return CreatedAtAction(\n                nameof(GetRequest),\n                new { requestId = created.RequestId },\n                new { message = \"Your lab access request was sent to the system administrators.\", request = created });\n        }\n        catch (Exception ex) when (Map(ex) is { } result)\n        {\n            return result;\n        }\n    }",
+    "notes": {
+      "48": "Only lecturers reach this controller ([Authorize(Roles = \"Lecturer\")] on the class)",
+      "62": "The service saves the request and notifies the system admins",
+      "64": "201 Created, with the new request in the body",
+      "69": "Known exceptions become 400 / 403 / 404 / 409 (see Map below)"
+    }
+  },
+  "in-notify-fetch": {
+    "repo": "ARMS.Frontend",
+    "file": "src/services/notificationService.js",
+    "from": 101,
+    "language": "jsx",
+    "code": "const mapNotification = (dto) => ({\n  id: dto.id,\n  category: normalizeNotificationCategory(dto.type),\n  title: cleanTitle(dto.title),\n  message: dto.message,\n  date: dto.createdAt,\n  read: dto.isRead,\n})\n\n// --- Tiny in-memory pub/sub, so useNotifications() can live-refresh when a\n// support message is submitted or resolved elsewhere in the app. ---\nconst listeners = new Set()\nconst notify = () => listeners.forEach((listener) => listener())\n\n/** Refreshes every notification feed on screen (used after venue actions, which create notifications). */\nexport const refreshNotifications = () => notify()\n\n/**\n * Venue prototype: adds the signed-in user's venue notifications (category \"venues\", stub\n * data only) to their ARMS feed, newest first.\n */\nconst withVenueNotifications = async (items) => {\n  const venueItems = await fetchVenueNotificationsForSignedInUser()\n  return [...items, ...venueItems].sort((a, b) => new Date(b.date ?? 0) - new Date(a.date ?? 0))\n}\n\n/** Subscribes to notification-store changes; returns an unsubscribe function. */\nexport const subscribeNotifications = (listener) => {\n  listeners.add(listener)\n  return () => listeners.delete(listener)\n}",
+    "notes": {
+      "101": "Backend DTO (type, isRead, createdAt) → the UI’s notification shape",
+      "112": "A tiny publish/subscribe list inside the browser tab",
+      "116": "Called after actions that create notifications, so open feeds reload"
+    }
+  },
+  "in-notify-hook": {
+    "repo": "ARMS.Frontend",
+    "file": "src/features/notifications/hooks/useNotifications.js",
+    "from": 125,
+    "language": "jsx",
+    "code": "  useEffect(() => {\n    let cancelled = false\n    const load = async () => {\n      // Only show the loading state when there's nothing cached to display.\n      const cached = readCachedFeed(fetchFn, userId)\n      if (cached === null) {\n        setLoading(true)\n      } else {\n        setAllNotifications(cached)\n      }\n      const data = await fetchFn(userId)\n      if (!cancelled) {\n        writeCachedFeed(fetchFn, userId, data)\n        setAllNotifications(data)\n        setLoading(false)\n      }\n    }\n    load()\n    // Re-fetch whenever a support message is submitted/resolved elsewhere in\n    // the app, so this feed (student/lecturer/admin) stays live.\n    const unsubscribe = subscribeNotifications(load)\n    return () => {\n      cancelled = true\n      unsubscribe()\n    }\n  }, [userId, fetchFn])",
+    "notes": {
+      "129": "Shows the cached feed straight away…",
+      "135": "…then asks the API for the latest list",
+      "145": "There is no push channel: the feed reloads on page load and on these events"
+    }
+  },
+  "in-support-submit": {
+    "repo": "ARMS.Frontend",
+    "file": "src/services/supportService.js",
+    "from": 71,
+    "language": "jsx",
+    "code": "export const submitSupportMessage = async ({ category, subject, message, fromRole, fromId, fromName }) => {\n  const endpoint = SUBMIT_ENDPOINT_BY_ROLE[fromRole]\n  if (!endpoint) throw new Error('Only students and lecturers can send support messages.')\n\n  let data\n  try {\n    ;({ data } = await api.post(endpoint, { category, subject, message }))\n  } catch (error) {\n    throw new Error(errorMessage(error, 'Something went wrong — your message wasn’t sent. Please try again.'))\n  }\n\n  pushSupportNotification({ category, subject, message, fromRole, fromId, fromName }).catch((error) => {\n    console.error('Failed to refresh the admin support feed', error)\n  })\n  return { id: submittedTicketId(data) }\n}",
+    "notes": {
+      "72": "Students and lecturers post to their own role’s endpoint",
+      "82": "Then refreshes the admin feed; a failure here does not undo the ticket"
+    }
+  },
+  "in-support-api": {
+    "repo": "ARMS.Backend",
+    "file": "ARMS.API/Controllers/StudentSupportTicketsController.cs",
+    "from": 59,
+    "language": "csharp",
+    "code": "    [HttpPost]\n    public async Task<IActionResult> RaiseTicket(\n        [FromBody] SubmitSupportTicketDto request)\n    {\n        if (!TryGetUserId(out var userId))\n        {\n            return Unauthorized(new\n            {\n                message = \"Invalid user identity.\"\n            });\n        }\n\n        try\n        {\n            var result = await _tickets.SubmitAsync(\n                userId,\n                request);\n\n            return Ok(new\n            {\n                message =\n                    \"Your query has been sent to the system admin.\",\n\n                result\n            });\n        }\n        catch (ArgumentException ex)\n        {\n            return BadRequest(new\n            {\n                message = ex.Message\n            });\n        }",
+    "notes": {
+      "63": "Who is asking is read from the token",
+      "73": "Saves the ticket, notifies the admins and sends the email",
+      "85": "Validation problems come back as 400 with { message }"
     }
   },
   "ux-count-tabs": {

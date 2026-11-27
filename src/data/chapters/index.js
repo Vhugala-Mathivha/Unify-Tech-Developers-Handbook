@@ -6,8 +6,10 @@
 import { uiUxChapters } from './uiUx'
 import { frontendChapters } from './frontend'
 import { backendChapters } from './backend'
+import { integrationChapters } from './integration'
+import { databaseChapters } from './database'
 
-export const chapters = [...uiUxChapters, ...frontendChapters, ...backendChapters]
+export const chapters = [...uiUxChapters, ...frontendChapters, ...backendChapters, ...integrationChapters, ...databaseChapters]
 
 /** The spreads of a chapter, whichever way it was written. */
 export const chapterSpreads = (chapter) => chapter.spreads ?? [chapter]
