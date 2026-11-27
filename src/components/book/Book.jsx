@@ -10,6 +10,7 @@ import FrontCover from '../covers/FrontCover'
 import BackCover from '../covers/BackCover'
 import DedicationPage from '../pages/DedicationPage'
 import ContentsPage from '../pages/ContentsPage'
+import EndPage from '../pages/EndPage'
 import TocPage from '../pages/TocPage'
 import ChapterTextPage from '../chapter/ChapterTextPage'
 import ChapterCodePage from '../chapter/ChapterCodePage'
@@ -30,6 +31,8 @@ function renderPage(page) {
       return <TocPage category={page.category} groups={page.groups} continued={page.continued} />
     case 'chapter':
       return <ChapterTextPage chapter={page.chapter} spread={page.spread} part={page.part} parts={page.parts} />
+    case 'end':
+      return <EndPage />
     case 'chapter-code':
       return <ChapterCodePage chapter={page.chapter} spread={page.spread} />
     default:

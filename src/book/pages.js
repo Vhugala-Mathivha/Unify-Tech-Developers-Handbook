@@ -84,8 +84,10 @@ function buildPages() {
     })
   }
 
-  // the leaf count must be even, so pad with a blank page if needed
-  if (pages.length % 2) pages.push({ key: 'end-blank', type: 'blank' })
+  // "The End" is always the last printed page. The leaf count must be even,
+  // so a blank page goes before it when needed.
+  if (pages.length % 2 === 0) pages.push({ key: 'end-blank', type: 'blank' })
+  pages.push({ key: 'the-end', type: 'end' })
 
   pages.forEach((page, i) => {
     page.number = i + 1
